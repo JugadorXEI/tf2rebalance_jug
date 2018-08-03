@@ -1,0 +1,7 @@
+"tf2rebalance_attributes"
+{	
+	// The plugin will read from this file and add the attributes onto the classes
+	// or weapons you wish to modify or change.
+	// Read the example file if you wish to know how to fill this file (it's easy!)
+}
+

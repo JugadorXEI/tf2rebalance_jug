@@ -1,0 +1,156 @@
+"tf2rebalance_attributes"
+{	
+	// This is an example file meant to teach how to add attributes onto
+	// classes or weapons. The plugin does not read from this file.
+	
+	// However, if you wish to see this file in action, rename it to:
+	// tf2rebalance_attributes.txt
+	// If you modify this file and you wish the changes to apply right now,
+	// be sure to have root admin privileges and type: "sm_tfrebalance_refresh"
+	
+	// ---
+	
+	// This is the classes section. Within here, and only here, you will
+	// be able to modify the starting attributes for each class.
+	// If you wish to add any attributes into any class, then this
+	// needs to be the first section of the file.
+	// If you don't wish to modify any class, don't add this section.
+	"classes"
+    {
+		// Here, you can add a section for each class you want to add
+		// attributes on. These can be:
+		// "scout", "soldier", "pyro", "demoman", "heavy", "engineer",
+		// "sniper", "medic", and "spy"
+		
+		// This is a scout section. Any attributes or information added
+		// here will be attributed to this class.
+		"scout"
+		{
+			// The "info" key gives the class a description.
+			// This can potentially be used to give a brief description
+			// about the changes done to the player. By default, the
+			// description character limit is 1000 characters.
+			// Typing \n will add a new line into the description.
+			// Players can see this info by typing /class_info in chat.
+			// Adding this key isn't required, but recommended.
+			"info" "This is a cool info piece.\nAwesome!"
+		
+			// This is an attribute[number] section.
+			// Each attribute you add must be numbered incrementally,
+			// like "attribute1", "attribute2", "attribute3"...
+			// You can add up to 20 attributes.
+			"attribute1"
+			{
+				// For each attribute, you must add an "id" key
+				// and a "value" key. Otherwise, the attribute 
+				// you add might not work correctly.
+				
+				// The "id" key indicates the id of the
+				// attribute you wish to add into the class.
+				// You can find them on the follwing website:
+				// http://optf2.com/440/attributes
+				"id"    	"26" // move speed bonus
+				
+				// The "value" indicates the value of the
+				// attribute you wish to add.
+				"value"		"100"
+			}
+			
+			// If you don't wish to add any attributes or info on
+			// the class, then please don't add it.
+		}
+		
+		// Here's a soldier section:
+		"soldier"
+		{
+			"info"	"Soldier:\n- Your torso is now 100% bigger. Whoa.\n- +2 HP per second."
+			
+			"attribute1"
+			{
+				"id"	"620" // torso scale
+				"value"	"2.0"
+			}
+			
+			"attribute2"
+			{
+				"id"	"190" // active health regen
+				"value"	"2"
+			}
+		}
+	}
+	
+	// This is a weapon section.
+	// Weapons are defined through their item definition IDs. These
+	// can be found here: 
+	// http://git.optf2.com/schema-tracking/plain/Team%20Fortress%202%20Client%20Schema?h=teamfortress2
+	// "127" is the Direct Hit's item definition ID.
+	"127"
+	{
+		// This is a "keepattribs" key. If set to 1, then the item
+		// will preserve the attributes it spawns with.
+		// If this key isn't added, or if the key is set to 0,
+		// Then all of the weapon's attributes will be removed
+		// by default, which can be useful for complete weapon remakes.
+		"keepattribs" "1"
+		
+		// This is an "info" key. Works as explained like on the
+		// classes section above, but if a player wants to see
+		// its description, they must write /weapon_info instead.
+		"info"	"Direct Hit:\n- 25% jump height.\n- -50% less clip size."
+		
+		// Attributes can be added on weapons just like it was
+		// explained before:
+		"attribute1"
+		{
+			"id"	"326"	 // increased jump height
+			"value"	"1.25"
+		}
+		
+		"attribute2"
+		{
+			"id"	"3" 	// clip size penalty
+			"value"	"1.50"
+		}
+	}
+	
+	// This is a weapon section with multiple weapons defined.
+	// Each weapon added must be separated with a " ; " and 
+	// will use the same information defined within the section,
+	// such as attributes or information.
+	// The IDs define both the YER and the Wanga Prick.
+	"225 ; 574"
+	{
+		// We don't define an "keepattribs" key because
+		// we want to wipe all of the attributes of both weapons.
+		// We don't add an "info" key because it's optional.
+	
+		"attribute1"
+		{
+			"id"	"201" // gesture speed increase
+			"value"	"2.0"
+		}
+		
+		"attribute2"
+		{
+			"id"	"6" // fire rate bonus
+			"value"	"2.0"		
+		}
+	}
+	
+	// The weapon ID we define here is the Chargin' Targe.
+	// This is special because it's a wearable and cannot be held.
+	"131"
+	{
+		// If a player wishes to see the description of their
+		// wearable-like items, then they must write /wearable_info.
+		// Same applies to the BASE Jumper even though it's technically
+		// not a wearable.
+		"info"	"Why are you using a shield?"
+		
+		"keepattribs" "1"
+		
+		// We don't add any new attributes because we just want to add
+		// information about the weapon in case it's modified through another
+		// plugin.
+	}
+}
