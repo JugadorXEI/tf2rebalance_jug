@@ -19,8 +19,8 @@
 #define MAXIMUM_WEAPONSPERATTRIBUTESET 52
 //////////////////
 
-// 1.43: increased weapon limit for each attribute set.
-// increased weapon-storing string buffer (crafing was pushing the plugin to its limits lol)
+// 1.50: Added `sm_tfrebalance_changetimer` ConVar
+// If higher than zero, changes will apply to weapons after a set timer.
 
 #define PLUGIN_VERSION "v1.43"
 
@@ -44,6 +44,7 @@ ConVar g_bEnablePlugin; // Convar that enables plugin
 ConVar g_bLogMissingDependencies; // Convar that, if enabled, will log if dependencies are missing.
 ConVar g_bFirstTimeInfoOnSpawn; // Convar that displays info to the players on their first spawn that their weapons are modified.
 ConVar g_bItemPreserveAttributesDefault; // Convar that controls if the attributes should be preserved by default or not.
+ConVar g_bChangeWeaponOnTimer; // Convar that will change weapons or wearables after a set timer.
 bool g_bFirstSpawn[MAXPLAYERS+1] = false; // Bool that indicates the player's first spawn.
 
 // Keyvalues file for attributes
@@ -100,6 +101,8 @@ public void OnPluginStart()
 	g_bItemPreserveAttributesDefault = CreateConVar("sm_tfrebalance_preserveattribsbydefault", "0",
 	"Should the weapons set on the tf2rebalance_attributes.txt file preserve attributes by default? Default = 0, 1 to enable. "
 	... "This is always overriden if the weapon has a \"keepattribs\" value set on the configuration file.", FCVAR_DONTRECORD|FCVAR_PROTECTED);
+	g_bChangeWeaponOnTimer = CreateConVar("sm_tfrebalance_changetimer", "0",
+	"If higher than zero, the changes will be applied to weapons after a set timer (example: 0.25). Use this to increase compatibility with other plugins.", FCVAR_DONTRECORD|FCVAR_PROTECTED);
 	
 	// Admin command that refreshses the tf2rebalance_attributes file.
 	RegAdminCmd("sm_tfrebalance_refresh", Rebalance_RefreshFile, ADMFLAG_ROOT,
@@ -229,20 +232,230 @@ public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroa
 				iAdded++; // We increase one on this int.
 			}
 		}
+		
+		// If the changetimer convar is non-zero, we create a timer that changes the weapons
+		// after such time.
+		if (g_bChangeWeaponOnTimer.FloatValue > 0)
+		{
+			// The timer is non-repeating, and we pass the client as the value.
+			CreateTimer(g_bChangeWeaponOnTimer.FloatValue, Timer_ChangeWeapons, iClient, TIMER_FLAG_NO_MAPCHANGE);
+		}
 	}
 }
 
+// Timer function that will give weapons to a player if sm_tfrebalance_changetimer is higher than zero.
+// A bit dirty, but compatibility is compatibility.
+public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
+{
+	// Is the client valid, are they alive and is the plugin enabled?
+	// We check if the client is alive in case they suicided or died really quickly.
+	if (IsValidClient(iClient) && IsPlayerAlive(iClient) && g_bEnablePlugin.BoolValue)
+	{
+		// Various ints related to the client's weapons and their definition indexes.
+		int iPrimary, iPrimaryIndex, iSecondary, iSecondaryIndex, iMelee, iMeleeIndex, iBuilding, iBuildingIndex;
+		TFClassType iClass;
+		
+		// We get the client's class.
+		iClass = TF2_GetPlayerClass(iClient);
+		
+		// primary weapon and def index:
+		iPrimary = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Primary);
+		if (iPrimary != -1) iPrimaryIndex = GetEntProp(iPrimary, Prop_Send, "m_iItemDefinitionIndex");
+		
+		// secondary weapon and def index:
+		iSecondary = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Secondary);
+		if (iSecondary != -1) iSecondaryIndex = GetEntProp(iSecondary, Prop_Send, "m_iItemDefinitionIndex");
+		
+		// melee weapon and def index:
+		iMelee = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Melee);
+		if (iMelee != -1) iMeleeIndex = GetEntProp(iMelee, Prop_Send, "m_iItemDefinitionIndex");
+	
+		// building weapon and def index:
+		if (iClass == TFClass_Spy)
+		{
+			iBuilding = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Building);
+			if (iBuilding != -1) iBuildingIndex = GetEntProp(iBuilding, Prop_Send, "m_iItemDefinitionIndex");
+		}
+	
+		// Debug stuff:
+		// PrintToConsole(iClient, "iPrimary: %i (Index: %i)\niSecondary: %i (Index: %i)\niMelee: %i (Index: %i)", iPrimary, iPrimaryIndex, iSecondary, iSecondaryIndex, iMelee, iMeleeIndex);
+		
+		// Int where we'll store which slot we'll remove.
+		int iWeaponSlotToRemove = -1;
+		
+		// We go through all the weapons we've modified to see if we can replace the player's weapon
+		// with another one that matches the index id.
+		for (int i = 0; i <= g_iRebalance_ItemIndexChangesNumber; i++)
+		{			
+			// If a weapon's definition index matches with the one stored...
+			if (iPrimaryIndex == g_iRebalance_ItemIndexDef[i] ||
+			iSecondaryIndex == g_iRebalance_ItemIndexDef[i] ||
+			iMeleeIndex == g_iRebalance_ItemIndexDef[i] ||
+			iBuildingIndex == g_iRebalance_ItemIndexDef[i])
+			{
+				// Here we'll store the weapon entity we'll replace.
+				int iWeaponToChange = -1;
+				
+				if (iPrimaryIndex == g_iRebalance_ItemIndexDef[i]) // If primary...
+				{
+					iWeaponSlotToRemove = TFWeaponSlot_Primary; // We'll remove the primary...
+					iWeaponToChange = iPrimary; // And use the primary as a reference for the weapon we'll change.
+				}
+				else if (iSecondaryIndex == g_iRebalance_ItemIndexDef[i]) // If secondary...
+				{
+					iWeaponSlotToRemove = TFWeaponSlot_Secondary; // We'll remove the secondary...
+					iWeaponToChange = iSecondary; // And use the secondary as a reference for the weapon we'll change.
+				}
+				else if (iMeleeIndex == g_iRebalance_ItemIndexDef[i]) // If melee...
+				{
+					iWeaponSlotToRemove = TFWeaponSlot_Melee; // We'll remove the melee...
+					iWeaponToChange = iMelee; // And use the melee as a reference for the weapon we'll change.
+				}
+				else if (iBuildingIndex == g_iRebalance_ItemIndexDef[i]) // If watch...
+				{
+					iWeaponSlotToRemove = TFWeaponSlot_Building; // We'll remove the watch...
+					iWeaponToChange = iBuilding; // And use the watch as a reference for the weapon we'll change.
+				}
+				
+				// PrintToServer("Timer_ChangeWeapons: Parsing %N's weapon with id %i...",
+				// iClient, g_iRebalance_ItemIndexDef[i]);
+				
+				// We will add as many attributes as put on the attributes file.
+				int iAdded = 1;
+				
+				// If the weapon we want to change is valid...
+				if (IsValidEntity(iWeaponToChange) && iWeaponToChange > 0)
+				{				
+					// TF2Items: we'll create a handle here that'll store the item we'll replace.
+					Handle hWeaponReplacement = TF2Items_CreateItem(OVERRIDE_ALL);
+					
+					// We set a char variable with fists as a fallback (this should never happen).
+					char cWeaponClassname[64] = "tf_weapon_fists"; // Fists as fallback.
+					
+					// We'll get the classname from the entity we're basing it from, then set it as the classname we'll use.
+					GetEntityClassname(iWeaponToChange, cWeaponClassname, sizeof(cWeaponClassname));
+					TF2Items_SetClassname(hWeaponReplacement, cWeaponClassname);
+					
+					// We'll use the stored item definition index as the weapon index we'll create. 
+					TF2Items_SetItemIndex(hWeaponReplacement, g_iRebalance_ItemIndexDef[i]);			
+					
+					TF2Items_SetQuality(hWeaponReplacement, 10); // Customized Quality
+					TF2Items_SetLevel(hWeaponReplacement, GetRandomInt(1, 100)); // Random Level
+					
+					if (g_bRebalance_ShouldItemPreserveAttributes[i]) // If we preserve attributes.
+					{
+						// We get the static attributes of the weapon we're parsing through tf2attributes.
+						// Since we're creating a whole new weapon, this is sort of required.
+						if (g_bIsTF2AttributesEnabled)
+						{
+							// We create a bunch of variables meant to declare the number of static and total attributes,
+							// and the attributes and their values gotten through TF2Attrib_GetStaticAttribs.
+							int iNumOfStaticAttributes = -1, iNumOfTotalAttributes = -1, iAttribIndexes[16];
+							float fAttribValues[16];
+							iNumOfStaticAttributes = TF2Attrib_GetStaticAttribs(g_iRebalance_ItemIndexDef[i], iAttribIndexes, fAttribValues) - 1;
+							
+							// We set the total attributes to be the static ones + the ones we wanna add.
+							iNumOfTotalAttributes = iNumOfStaticAttributes + g_iRebalance_ItemAttribute_AddNumber[i];
+							TF2Items_SetNumAttributes(hWeaponReplacement, iNumOfTotalAttributes);
+							
+							// Attribute additions:
+							// We'll add the static attributes first.
+							// PrintToServer("Static attribute total: %i", iNumOfStaticAttributes);
+							
+							while (iAdded <= iNumOfStaticAttributes)
+							{
+								// Attribute debug stuff.
+								// PrintToServer("Added static attribute %i with value %f to weapon (iAdded: %i)",
+								// iAttribIndexes[iAdded], fAttribValues[iAdded], iAdded);
+								// Then we'll add one attribute in.
+								TF2Items_SetAttribute(hWeaponReplacement, iAdded - 1,
+								iAttribIndexes[iAdded], fAttribValues[iAdded]);
+								
+								iAdded++; // We increase one on this int.
+							}
+							
+							// Afterwards, we'll add the attributes from the keyvalues file.
+							int iAddedKv = 1; 
+							while (iAddedKv <= g_iRebalance_ItemAttribute_AddNumber[i])
+							{
+								// PrintToServer("Added keyvalues attribute %i to weapon (iAdded: %i)", g_iRebalance_ItemAttribute_Add[i][iAddedKv], iAdded);
+								// Then we'll add one attribute in.
+								TF2Items_SetAttribute(hWeaponReplacement, iAdded - 1,
+								g_iRebalance_ItemAttribute_Add[i][iAddedKv], view_as<float>(g_fRebalance_ItemAttribute_AddValue[i][iAddedKv]));
+								
+								iAddedKv++; // We increase one on this int.
+								iAdded++; // Another one in this one too.
+							}
+						}
+						else
+						{
+							PrintToServer("[TFRebalance %s] tf2attributes is required in order to preserve attributes alongside tf_rebalance_changetimer. "
+							... "Please install tf2attributes for this to work.", PLUGIN_VERSION);
+							LogMessage("[TFRebalance %s] tf2attributes is required for tf_rebalance_changetimer and the \"keepattribs\" keyvalue to work in unison. "
+							... "Please install tf2attributes for this to work.", PLUGIN_VERSION);
+						}
+
+					}
+					else // If we *don't* preserve attributes.
+					{
+						// We add as many attributes as we put on the keyvalues file.
+						TF2Items_SetNumAttributes(hWeaponReplacement, g_iRebalance_ItemAttribute_AddNumber[i]);
+						
+						// Attribute additions:
+						// As long as iAdded is less than the attributes we'll stored...
+						while (iAdded <= g_iRebalance_ItemAttribute_AddNumber[i])
+						{
+							//PrintToServer("Added %i to weapon", g_iRebalance_ItemAttribute_Add[i][iAdded]);
+							// Then we'll add one attribute in.
+							TF2Items_SetAttribute(hWeaponReplacement, iAdded - 1,
+							g_iRebalance_ItemAttribute_Add[i][iAdded], view_as<float>(g_fRebalance_ItemAttribute_AddValue[i][iAdded]));
+							
+							iAdded++; // We increase one on this int.
+						}					
+					}
+					
+					// We'll remove the player's current weapon.
+					TF2_RemoveWeaponSlot(iClient, iWeaponSlotToRemove);					
+
+					// We create a int variable for the weapon we've created.
+					int iNewIndex = TF2Items_GiveNamedItem(iClient, hWeaponReplacement);
+					
+					// Then we'll close the handle that was the weapon in question and then we'll equip it to the player.
+					CloseHandle(hWeaponReplacement);
+					EquipPlayerWeapon(iClient, iNewIndex);
+				}
+			}
+		}		
+		
+	}
+	
+	return Plugin_Continue;
+}
+
+// This TF2Items forward changes the item after it's initialized.
 public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItemDefinitionIndex, Handle &hWeaponReplacement)
 {	
-	if (IsValidClient(iClient) && g_bEnablePlugin.BoolValue) // If the client's valid and the plugin's enabled...
+	// If the client's valid, the plugin's enabled
+	if (IsValidClient(iClient) && g_bEnablePlugin.BoolValue) 
 	{		
+		// PrintToServer("TF2Items_OnGiveNamedItem: Parsing %N's %s (%i)...", iClient, cClassname, iItemDefinitionIndex);
+		
 		// We go through all the weapons we've modified to see if we can replace the player's weapon
 		// with another one.
 		for (int i = 0; i <= g_iRebalance_ItemIndexChangesNumber; i++)
 		{			
 			// If a weapon's definition index matches with the one stored...
 			if (iItemDefinitionIndex == g_iRebalance_ItemIndexDef[i])
-			{				
+			{		
+				// If the changetimer is higher than zero (aka enabled)...
+				if (g_bChangeWeaponOnTimer.FloatValue > 0.0)
+				{
+					// If the weapon isn't a wearable, we keep it intact.
+					// This makes it so wearables are changed using the typical method
+					// while the changetimer timer function changes the weapons.
+					if (StrContains(cClassname, "tf_wearable", false)) return Plugin_Continue;
+				}
+				
 				// We will add as many attributes as put on the attributes file.
 				int iAdded = 1;
 					
@@ -269,7 +482,7 @@ public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItem
 						iAdded++; // We increase one on this int.
 					}					
 				}	
-				else // If the 
+				else // If we *don't* preverse attributes.
 				{
 					// TF2Items: we'll create a handle here that'll store the item we'll replace.
 					hWeaponReplacement = TF2Items_CreateItem(OVERRIDE_ATTRIBUTES);
