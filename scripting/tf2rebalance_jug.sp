@@ -22,7 +22,7 @@
 // 1.50: Added `sm_tfrebalance_changetimer` ConVar
 // If higher than zero, changes will apply to weapons after a set timer.
 
-#define PLUGIN_VERSION "v1.43"
+#define PLUGIN_VERSION "v1.50"
 
 enum HelpType
 {
