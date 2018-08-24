@@ -414,8 +414,9 @@ public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
 							{
 								if (g_bDebugGiveWeapons.BoolValue)
 								{
-									PrintToServer("Added keyvalues attribute %i to weapon (iAdded: %i)",
-									g_iRebalance_ItemAttribute_Add[i][iAddedKv], iAdded);
+									PrintToServer("Added keyvalues attribute %i with value %f to weapon (iAdded: %i)",
+									g_iRebalance_ItemAttribute_Add[i][iAddedKv],
+									view_as<float>(g_fRebalance_ItemAttribute_AddValue[i][iAddedKv]), iAdded);
 								}
 								// Then we'll add one attribute in.
 								TF2Items_SetAttribute(hWeaponReplacement, iAdded - 1,
@@ -445,8 +446,9 @@ public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
 						{
 							if (g_bDebugGiveWeapons.BoolValue)
 							{
-								PrintToServer("Added keyvalues attribute %i to weapon (iAdded: %i)",
-								g_iRebalance_ItemAttribute_Add[i][iAdded], iAdded);
+								PrintToServer("Added keyvalues attribute %i with value %f to weapon (iAdded: %i)",
+								g_iRebalance_ItemAttribute_Add[i][iAdded],
+								view_as<float>(g_fRebalance_ItemAttribute_AddValue[i][iAdded]), iAdded);
 							}
 							// Then we'll add one attribute in.
 							TF2Items_SetAttribute(hWeaponReplacement, iAdded - 1,
@@ -531,8 +533,9 @@ public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItem
 					{
 						if (g_bDebugGiveWeapons.BoolValue)
 						{
-							PrintToServer("Added keyvalues attribute %i to weapon (iAdded: %i)",
-							g_iRebalance_ItemAttribute_Add[i][iAdded], iAdded);
+							PrintToServer("Added keyvalues attribute %i with value %f to weapon (iAdded: %i)",
+							g_iRebalance_ItemAttribute_Add[i][iAdded],
+							view_as<float>(g_fRebalance_ItemAttribute_AddValue[i][iAdded]), iAdded);
 						}
 						// Then we'll add one attribute in.
 						TF2Items_SetAttribute(hWeaponReplacement, iAdded - 1,
@@ -555,8 +558,9 @@ public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItem
 					{
 						if (g_bDebugGiveWeapons.BoolValue)
 						{
-							PrintToServer("Added keyvalues attribute %i to weapon (iAdded: %i)",
-							g_iRebalance_ItemAttribute_Add[i][iAdded], iAdded);
+							PrintToServer("Added keyvalues attribute %i with value %f to weapon (iAdded: %i)",
+							g_iRebalance_ItemAttribute_Add[i][iAdded],
+							view_as<float>(g_fRebalance_ItemAttribute_AddValue[i][iAdded]), iAdded);
 						}
 						// Then we'll add one attribute in.
 						TF2Items_SetAttribute(hWeaponReplacement, iAdded - 1,
