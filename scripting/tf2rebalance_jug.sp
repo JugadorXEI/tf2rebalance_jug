@@ -19,10 +19,15 @@
 #define MAXIMUM_WEAPONSPERATTRIBUTESET 52
 //////////////////
 
-// 1.50: Added `sm_tfrebalance_changetimer` ConVar
-// If higher than zero, changes will apply to weapons after a set timer.
+// 1.7.0: Added bot-related commands:
+// sm_tfrebalance_timer_onlybots (def. 0), which indicates if sm_tfrebalance_changetimer should only affect bots.
+// sm_tfrebalance_bots_giveweapons (def. 1), which indicates if bots should be given changes to their weapons.
+// sm_tfrebalance_botsmvm_giveweapons (def. 0), which indicates if MvM bots should have their weapons changed.
+// --
+// Fixed a bug related to static attributes being given one more to a weapon than it should've been given to.
+// Now a config file is generated on cfg/sourcemod showing all convars that can be changed.
 
-#define PLUGIN_VERSION "v1.6.0"
+#define PLUGIN_VERSION "v1.7.0"
 
 enum HelpType
 {
@@ -45,6 +50,9 @@ ConVar g_bLogMissingDependencies; // Convar that, if enabled, will log if depend
 ConVar g_bFirstTimeInfoOnSpawn; // Convar that displays info to the players on their first spawn that their weapons are modified.
 ConVar g_bItemPreserveAttributesDefault; // Convar that controls if the attributes should be preserved by default or not.
 ConVar g_fChangeWeaponOnTimer; // Convar that will change weapons or wearables after a set timer.
+ConVar g_bTimerOnlyAffectsBots; // Convar that'll make it so the timer function only affects bots.
+ConVar g_bGiveWeaponsToBots; // Convar that changes the weapons of bots.
+ConVar g_bGiveWeaponsToMvMBots; // Convar that changes the weapons of MvM bots.
 ConVar g_bDebugGiveWeapons; // Convar that throws debug messages about given weapons on the server console.
 ConVar g_bDebugKeyvaluesFile; // Convar that throws debug messages about keyvalues parsing on the server console.
 bool g_bFirstSpawn[MAXPLAYERS+1] = false; // Bool that indicates the player's first spawn.
@@ -54,6 +62,8 @@ Handle g_hKeyvaluesAttributesFile = INVALID_HANDLE;
 
 // Plugin dependencies: are they enabled or not?
 bool g_bIsTF2AttributesEnabled = false;
+// Is the mode MvM?
+bool g_bIsMVM = false;
 
 // Bool that indicates if that item has been changed.
 bool g_bRebalance_ItemIndexChanged[MAXIMUM_ADDITIONS] = false;
@@ -95,22 +105,48 @@ public void OnPluginStart()
 {
 	// Convars, they do what they say on the tin.
 	g_bEnablePlugin = CreateConVar("sm_tfrebalance_enable", "1",
-	"Enables/Disables the plugin. Default = 1, 0 to disable.", FCVAR_DONTRECORD|FCVAR_PROTECTED);
+	"Enables/Disables the plugin. Default = 1, 0 to disable.",
+	FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
 	g_bLogMissingDependencies = CreateConVar("sm_tfrebalance_logdependencies", "1",
-	"If any dependencies are missing from the plugin, log them on SourceMod logs. Default = 1, 0 to disable.", FCVAR_DONTRECORD|FCVAR_PROTECTED);
+	"If any dependencies are missing from the plugin, log them on SourceMod log files. Default = 1, 0 to disable.",
+	FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
 	g_bFirstTimeInfoOnSpawn = CreateConVar("sm_tfrebalance_firsttimeinfo", "1",
-	"Displays on the first player's spawn information about the modifications done to the weapons. Default = 1, 0 to disable.", FCVAR_DONTRECORD|FCVAR_PROTECTED);
+	"Displays on the first player's spawn information about the modifications done to the weapons. Default = 1, 0 to disable.",
+	FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
 	g_bItemPreserveAttributesDefault = CreateConVar("sm_tfrebalance_preserveattribsbydefault", "0",
 	"Should the weapons set on the tf2rebalance_attributes.txt file preserve attributes by default? Default = 0, 1 to enable. "
-	... "This is always overriden if the weapon has a \"keepattribs\" value set on the configuration file.", FCVAR_DONTRECORD|FCVAR_PROTECTED);
+	... "This is always overriden if the weapon has a \"keepattribs\" value set on the configuration file.",
+	FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
 	g_fChangeWeaponOnTimer = CreateConVar("sm_tfrebalance_changetimer", "0",
-	"If higher than zero, the changes will be applied to weapons after a set timer (example: 0.25). Use this to increase compatibility with other plugins.", FCVAR_DONTRECORD|FCVAR_PROTECTED);
+	"If higher than zero, the changes will be applied to weapons after a set timer (example: 0.25). "
+	... "Use this to increase compatibility with other plugins.", FCVAR_PROTECTED, true, 0.0);
+	
+	g_bTimerOnlyAffectsBots = CreateConVar("sm_tfrebalance_timer_onlybots", "0",
+	"If enabled, sm_tfrebalance_changetimer will only affect to bots only. Default = 1, 0 to disable.",
+	FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
+	g_bGiveWeaponsToBots = CreateConVar("sm_tfrebalance_bots_giveweapons", "1",
+	"Should Bots' weapons be changed by the plugin? Default = 1, 0 to disable.",
+	FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
+	g_bGiveWeaponsToMvMBots = CreateConVar("sm_tfrebalance_botsmvm_giveweapons", "0",
+	"Should MvM Bots' weapons be changed by the plugin? Enabling this could cause issues. Default = 0, 1 to enable.",
+	FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
 	g_bDebugGiveWeapons = CreateConVar("sm_tfrebalance_debug_giveweapons", "0",
 	"Enables a verbose debug mode that shows which function is adding attributes into what weapon and displays it on the server console. "
-	... "Default = 0, 1 to enable.", FCVAR_DONTRECORD|FCVAR_PROTECTED);
+	... "Default = 0, 1 to enable.", FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
 	g_bDebugKeyvaluesFile = CreateConVar("sm_tfrebalance_debug_configfile", "0",
 	"Enables a VERY verbose debug mode that shows what the plugin is parsing within the keyvalues (configuration) file and displays it on the server console. "
-	... "Default = 0, 1 to enable.", FCVAR_DONTRECORD|FCVAR_PROTECTED);
+	... "Default = 0, 1 to enable.", FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
+	// We create a config file that generates the ConVars that this plugin has.
+	AutoExecConfig(true, "tf2rebalance_commands");
 	
 	// Admin command that refreshses the tf2rebalance_attributes file.
 	RegAdminCmd("sm_tfrebalance_refresh", Rebalance_RefreshFile, ADMFLAG_ROOT,
@@ -144,6 +180,12 @@ public void OnMapStart()
 	{
 		PrintToServer("[TFRebalance %s] Stored %i weapons and %i classes in total to change.", PLUGIN_VERSION,
 		g_iRebalance_ItemIndexChangesNumber, g_iRebalance_ClassChangesNumber);
+	}
+	
+	// We try to see if the current map is an MvM one.
+	if (GameRules_GetProp("m_bPlayingMannVsMachine"))
+	{
+		g_bIsMVM = true;
 	}
 	
 	// If any of the (optional) requirements aren't loaded, we log that in just in case.
@@ -244,11 +286,16 @@ public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroa
 		// If the changetimer convar is non-zero, we create a timer that changes the weapons
 		// after such time.
 		if (g_fChangeWeaponOnTimer.FloatValue > 0)
-		{
-			// The timer is non-repeating, and we pass the client as the value.
+		{	
+			// If the client is not eligible for a changed weapon, we stop this part of the plugin.
+			if (!IsClientEligibleForWeapon(iClient)) return Plugin_Handled;
+			else if (g_bTimerOnlyAffectsBots && !IsFakeClient(iClient)) return Plugin_Handled;
+			
 			CreateTimer(g_fChangeWeaponOnTimer.FloatValue, Timer_ChangeWeapons, iClient, TIMER_FLAG_NO_MAPCHANGE);
 		}
 	}
+	
+	return Plugin_Continue;
 }
 
 // Timer function that will give weapons to a player if sm_tfrebalance_changetimer is higher than zero.
@@ -258,7 +305,7 @@ public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
 	// Is the client valid, are they alive and is the plugin enabled?
 	// We check if the client is alive in case they suicided or died really quickly.
 	if (IsValidClient(iClient) && IsPlayerAlive(iClient) && g_bEnablePlugin.BoolValue)
-	{
+	{	
 		// Various ints related to the client's weapons and their definition indexes.
 		int iPrimary, iPrimaryIndex, iSecondary, iSecondaryIndex, iMelee, iMeleeIndex, iBuilding, iBuildingIndex;
 		TFClassType iClass;
@@ -361,7 +408,7 @@ public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
 						{
 							// We create a bunch of variables meant to declare the number of static and total attributes,
 							// and the attributes and their values gotten through TF2Attrib_GetStaticAttribs.
-							int iNumOfStaticAttributes = -1, iNumOfTotalAttributes = -1, iAttribIndexes[16];
+							int iNumOfStaticAttributes = 0, iNumOfTotalAttributes = -1, iAttribIndexes[16];
 							float fAttribValues[16];
 							iNumOfStaticAttributes = TF2Attrib_GetStaticAttribs(g_iRebalance_ItemIndexDef[i], iAttribIndexes, fAttribValues) - 1;
 							
@@ -382,19 +429,19 @@ public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
 								if (g_bDebugGiveWeapons.BoolValue)
 								{
 									PrintToServer("Added static attribute %i with value %f to weapon (iAdded: %i)",
-									iAttribIndexes[iAdded], fAttribValues[iAdded], iAdded);
+									iAttribIndexes[iAdded-1], fAttribValues[iAdded-1], iAdded);
 								}
 								// Then we'll add one attribute in.
-								if (iAttribIndexes[iAdded] != 0)
+								if (iAttribIndexes[iAdded-1] != 0)
 								{
 									TF2Items_SetAttribute(hWeaponReplacement, iAdded - 1,
-									iAttribIndexes[iAdded], fAttribValues[iAdded]);
+									iAttribIndexes[iAdded-1], fAttribValues[iAdded-1]);
+									iAdded++; // We increase one on this int.
 								}
 								else
 								{
 									LogAction(-1, -1, "[TFRebalance %s] Weapon with ID %i was attempted to be given 0 as an static attribute (iAdded: %i).",
 									PLUGIN_VERSION, g_iRebalance_ItemIndexDef[i], iAdded);
-									iAdded--; // We put the iAdded to the latest working index.
 									
 									if (g_bDebugGiveWeapons.BoolValue)
 									{
@@ -404,8 +451,7 @@ public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
 									
 									break;
 								}
-								
-								iAdded++; // We increase one on this int.
+											
 							}
 							
 							// Afterwards, we'll add the attributes from the keyvalues file.
@@ -482,6 +528,9 @@ public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItem
 	// If the client's valid, the plugin's enabled
 	if (IsValidClient(iClient) && g_bEnablePlugin.BoolValue) 
 	{		
+		// If the client is not eligible for a changed weapon, we stop this part of the plugin.
+		if (!IsClientEligibleForWeapon(iClient)) return Plugin_Continue;
+		
 		if (g_bDebugGiveWeapons.BoolValue)
 		{
 			PrintToServer("TF2Items_OnGiveNamedItem: Parsing %N's %s (%i)...",
@@ -495,18 +544,6 @@ public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItem
 			// If a weapon's definition index matches with the one stored...
 			if (iItemDefinitionIndex == g_iRebalance_ItemIndexDef[i])
 			{		
-				// If the changetimer is higher than zero (aka enabled)...
-				/* Commented because it doesn't really matter anyways.
-				if (g_fChangeWeaponOnTimer.FloatValue > 0.0)
-				{
-					// If the weapon isn't a wearable, we keep it intact.
-					// This makes it so wearables are changed using the typical method
-					// while the changetimer timer function changes the weapons.
-					if (!StrContains(cClassname, "tf_wearable", false)) return Plugin_Continue;
-					PrintToServer("this item is wearalbe!!");
-				}
-				*/
-				
 				// We will add as many attributes as put on the attributes file.
 				int iAdded = 1;
 					
@@ -986,6 +1023,25 @@ public TFClassType GetTFClassTypeFromName(const char[] cName)
 	else if (StrEqual(cName, "engineer", false)) return TFClass_Engineer;
 
 	return TFClass_Unknown;
+}
+
+public bool IsClientEligibleForWeapon(int iClient)
+{
+	if (IsFakeClient(iClient))
+	{	
+		if (!g_bGiveWeaponsToBots.BoolValue) return false;
+		else
+		{
+			if (g_bIsMVM
+			&& TF2_GetClientTeam(iClient) == TFTeam_Blue
+			&& !g_bGiveWeaponsToMvMBots.BoolValue)
+			{
+				return false;
+			}
+		}
+	}
+	
+	return true;
 }
 
 // Function that wipes stored attributes.
