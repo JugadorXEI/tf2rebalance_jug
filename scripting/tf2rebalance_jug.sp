@@ -19,15 +19,11 @@
 #define MAXIMUM_WEAPONSPERATTRIBUTESET 52
 //////////////////
 
-// 1.7.0: Added bot-related commands:
-// sm_tfrebalance_timer_onlybots (def. 0), which indicates if sm_tfrebalance_changetimer should only affect bots.
-// sm_tfrebalance_bots_giveweapons (def. 1), which indicates if bots should be given changes to their weapons.
-// sm_tfrebalance_botsmvm_giveweapons (def. 0), which indicates if MvM bots should have their weapons changed.
-// --
-// Fixed a bug related to static attributes being given one more to a weapon than it should've been given to.
-// Now a config file is generated on cfg/sourcemod showing all convars that can be changed.
+// 1.7.1: 
+// Now the timer function will inherit the quality and level of the item it's trying to recreate.
+// Fixed a bug where the plugin would try to add attributes to classes without checking if tf2attributes was enabled.
 
-#define PLUGIN_VERSION "v1.7.0"
+#define PLUGIN_VERSION "v1.7.1"
 
 enum HelpType
 {
@@ -55,13 +51,14 @@ ConVar g_bGiveWeaponsToBots; // Convar that changes the weapons of bots.
 ConVar g_bGiveWeaponsToMvMBots; // Convar that changes the weapons of MvM bots.
 ConVar g_bDebugGiveWeapons; // Convar that throws debug messages about given weapons on the server console.
 ConVar g_bDebugKeyvaluesFile; // Convar that throws debug messages about keyvalues parsing on the server console.
-bool g_bFirstSpawn[MAXPLAYERS+1] = false; // Bool that indicates the player's first spawn.
 
 // Keyvalues file for attributes
 Handle g_hKeyvaluesAttributesFile = INVALID_HANDLE;
 
 // Plugin dependencies: are they enabled or not?
 bool g_bIsTF2AttributesEnabled = false;
+// Bool that indicates the player's first spawn.
+bool g_bFirstSpawn[MAXPLAYERS+1] = false; 
 // Is the mode MvM?
 bool g_bIsMVM = false;
 
@@ -262,26 +259,30 @@ public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroa
 	
 		// This is the part where we give the player the attributes.
 		TF2Attrib_RemoveAll(iClient); // We remove all of the client's attributes so they don't stack or mesh together.
-		TFClassType tfClassModified = TF2_GetPlayerClass(iClient); // We fet the client's class
+		TFClassType tfClassModified = TF2_GetPlayerClass(iClient); // We fetch the client's class
 		
-		// If a weapon's definition index matches with the one stored...
-		if (g_bRebalance_ClassChanged[tfClassModified] == true)
-		{				
-			int iAdded = 1;
-			
-			// Attribute additions:
-			// As long as iAdded is less than the attributes we'll stored...
-			while (iAdded <= g_iRebalance_ClassAttribute_AddNumber[tfClassModified])
-			{
-				//PrintToServer("Added %i to class", Rebalance_ClassAttribute_Add[tfClassModified][iAdded]);
-				// Then we'll add one attribute in.
-				TF2Attrib_SetByDefIndex(iClient, 
-				g_iRebalance_ClassAttribute_Add[tfClassModified][iAdded],
-				view_as<float>(g_fRebalance_ClassAttribute_AddValue[tfClassModified][iAdded]));
+		if (g_bIsTF2AttributesEnabled)
+		{
+			// If a weapon's definition index matches with the one stored...
+			if (g_bRebalance_ClassChanged[tfClassModified] == true)
+			{				
+				int iAdded = 1;
 				
-				iAdded++; // We increase one on this int.
+				// Attribute additions:
+				// As long as iAdded is less than the attributes we'll stored...
+				while (iAdded <= g_iRebalance_ClassAttribute_AddNumber[tfClassModified])
+				{
+					//PrintToServer("Added %i to class", Rebalance_ClassAttribute_Add[tfClassModified][iAdded]);
+					// Then we'll add one attribute in.
+					TF2Attrib_SetByDefIndex(iClient, 
+					g_iRebalance_ClassAttribute_Add[tfClassModified][iAdded],
+					view_as<float>(g_fRebalance_ClassAttribute_AddValue[tfClassModified][iAdded]));
+					
+					iAdded++; // We increase one on this int.
+				}
 			}
 		}
+
 		
 		// If the changetimer convar is non-zero, we create a timer that changes the weapons
 		// after such time.
@@ -397,8 +398,14 @@ public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
 					// We'll use the stored item definition index as the weapon index we'll create. 
 					TF2Items_SetItemIndex(hWeaponReplacement, g_iRebalance_ItemIndexDef[i]);			
 					
-					TF2Items_SetQuality(hWeaponReplacement, 10); // Customized Quality
-					TF2Items_SetLevel(hWeaponReplacement, GetRandomInt(1, 100)); // Random Level
+					// We get the quality and level of the item we're trying to re-recreate.
+					// Quality 10 is "Customized" and the default level is random as fallbacks.
+					int iItemQuality = 10, iItemLevel = GetRandomInt(1, 100);
+					iItemQuality = GetEntProp(iWeaponToChange, Prop_Send, "m_iEntityQuality");
+					iItemLevel = GetEntProp(iWeaponToChange, Prop_Send, "m_iEntityLevel");
+					
+					TF2Items_SetQuality(hWeaponReplacement, iItemQuality);
+					TF2Items_SetLevel(hWeaponReplacement, iItemLevel);
 					
 					if (g_bRebalance_ShouldItemPreserveAttributes[i]) // If we preserve attributes.
 					{
@@ -531,12 +538,6 @@ public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItem
 		// If the client is not eligible for a changed weapon, we stop this part of the plugin.
 		if (!IsClientEligibleForWeapon(iClient)) return Plugin_Continue;
 		
-		if (g_bDebugGiveWeapons.BoolValue)
-		{
-			PrintToServer("TF2Items_OnGiveNamedItem: Parsing %N's %s (%i)...",
-			iClient, cClassname, iItemDefinitionIndex);
-		}
-		
 		// We go through all the weapons we've modified to see if we can replace the player's weapon
 		// with another one.
 		for (int i = 0; i <= g_iRebalance_ItemIndexChangesNumber; i++)
@@ -546,10 +547,12 @@ public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItem
 			{		
 				// We will add as many attributes as put on the attributes file.
 				int iAdded = 1;
-					
+				
+				hWeaponReplacement = TF2Items_CreateItem(0);
+				
 				if (g_bRebalance_ShouldItemPreserveAttributes[i]) // If we preserve attributes.
 				{
-					hWeaponReplacement = TF2Items_CreateItem(OVERRIDE_ATTRIBUTES|PRESERVE_ATTRIBUTES);
+					TF2Items_SetFlags(hWeaponReplacement, OVERRIDE_ATTRIBUTES|PRESERVE_ATTRIBUTES);
 					
 					if (g_bDebugGiveWeapons.BoolValue)
 					{
@@ -584,7 +587,7 @@ public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItem
 				else // If we *don't* preserve attributes.
 				{
 					// TF2Items: we'll create a handle here that'll store the item we'll replace.
-					hWeaponReplacement = TF2Items_CreateItem(OVERRIDE_ATTRIBUTES);
+					TF2Items_SetFlags(hWeaponReplacement, OVERRIDE_ATTRIBUTES);
 				
 					// We add as many attributes as we put on the keyvalues file.
 					TF2Items_SetNumAttributes(hWeaponReplacement, g_iRebalance_ItemAttribute_AddNumber[i]);
@@ -606,7 +609,7 @@ public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItem
 						iAdded++; // We increase one on this int.
 					}
 				}
-
+				
 				return Plugin_Changed;
 			}
 		}
