@@ -1,0 +1,114 @@
+"Phrases"
+{
+	"TFRebalance_CustomWarning"
+	{
+		"es"			"Las armas con las que jugarás han sido modificadas y balanceadas por este servidor.\nEscribe /changes para saber más sobre lo que ha cambiado."
+	}
+
+	"TFRebalance_StoredItems"
+	{
+		"#format"		"{1:i},{2:i}"
+		"es"			"Se han guadado {1} armas y {2} clases para cambiar durante el juego."
+	}
+	
+	"TFRebalance_TF2Attributes_NoLoad"
+	{
+		"es"			"tf2attributes no está cargado. Esto hará que el plugin no pueda añadir atributos a clases."
+	}
+	
+	"TFRebalance_Disabled_NoTransparency"
+	{
+		"es"			"El plugin no está activado. No podemos hacer que tus armas sean transparentes."		
+	}
+	
+	"TFRebalance_InvalidPlayer"
+	{
+		"es"			"No eres un jugador válido."
+	}
+	
+	"TFRebalance_InvalidClass_NoTransparency"
+	{
+		"es"			"Solo podemos hacer que tus armas sean transparentes si reapareces como una clase."
+	}
+	
+	"TFRebalance_NormalWeapon"
+	{
+		"es"			"Tus armas han vuelto a la normalidad."
+	}
+	
+	"TFRebalance_TransparentWeapon"
+	{
+		"es"			"Tus armas son ahora transparentes."
+	}
+	
+	"TFRebalance_InfoChoose"
+	{
+		"es"			"Selecciona una opción de donde quieras saber información."
+	}
+	
+	"TFRebalance_NoChange"
+	{
+		"es"			"No parece haber ninguna información que te podamos dar."
+	}
+	
+	"TFRebalance_CurrentClass"
+	{
+		"es"			"Clase Actual"
+	}
+	
+	"TFRebalance_Primary"
+	{
+		"es"			"Arma Primaria"
+	}
+	
+	"TFRebalance_Secondary"
+	{
+		"es"			"Arma Secundaria"
+	}
+	
+	"TFRebalance_Melee"
+	{
+		"es"			"Arma de Cuerpo a Cuerpo"
+	}
+	
+	"TFRebalance_Grenade"
+	{
+		"es"			"Granada"
+	}
+	
+	"TFRebalance_Building"
+	{
+		"es"			"Reloj"
+	}
+	
+	"TFRebalance_PDA"
+	{
+		"es"			"PDA"
+	}
+	
+	"TFRebalance_Cosmetics"
+	{
+		"es"			"Cosméticos"
+	}
+	
+	"TFRebalance_ClassInfo"
+	{
+		"es"			"Información de clase:"
+	}
+	
+	"TFRebalance_WeaponInfo"
+	{
+		"#format"		"{1:s}"
+		"es"			"Información de {1}:"
+	}
+	
+	"TFRebalance_CosmeticInfo"
+	{
+		"es"			"Información de cosméticos:"
+	}
+	
+	"TFRebalance_Back"
+	{
+		"es"			"Atrás"
+	}
+}

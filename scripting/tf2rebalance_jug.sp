@@ -20,17 +20,17 @@
 //////////////////
 
 // 1.7.1: 
-// Now the timer function will inherit the quality and level of the item it's trying to recreate.
-// Fixed a bug where the plugin would try to add attributes to classes without checking if tf2attributes was enabled.
+// (Done) - Make command that makes weapons transparent.
+// (Done) - Create complex menu for weapon/class/wearable checking (/official, /changes, /change).
+// (Done) - Make various strings localizable (maybe potentially make descriptions localizable).
 
-#define PLUGIN_VERSION "v1.7.1"
+/* Next update: 1.9.0:
+- Implement TF2 Item DB for COOL STUFF
+	- Probably make a weapon system where one weapon can give stats depending on the class.
+	- Dynamic information on descriptions (example {1} would be the first attribute name, {1:n} would be the first attribute value)
+*/
 
-enum HelpType
-{
-	HelpType_Weapon = 1,
-	HelpType_Class,
-	HelpType_Wearable
-};
+#define PLUGIN_VERSION "v1.8.0"
 
 public Plugin myinfo =
 {
@@ -41,6 +41,7 @@ public Plugin myinfo =
 	url = "https://github.com/JugadorXEI",
 }
 
+// Convars
 ConVar g_bEnablePlugin; // Convar that enables plugin
 ConVar g_bLogMissingDependencies; // Convar that, if enabled, will log if dependencies are missing.
 ConVar g_bFirstTimeInfoOnSpawn; // Convar that displays info to the players on their first spawn that their weapons are modified.
@@ -51,6 +52,10 @@ ConVar g_bGiveWeaponsToBots; // Convar that changes the weapons of bots.
 ConVar g_bGiveWeaponsToMvMBots; // Convar that changes the weapons of MvM bots.
 ConVar g_bDebugGiveWeapons; // Convar that throws debug messages about given weapons on the server console.
 ConVar g_bDebugKeyvaluesFile; // Convar that throws debug messages about keyvalues parsing on the server console.
+
+// Cookies
+Handle g_CookieWeaponVis = INVALID_HANDLE;
+bool g_bWeaponVis[MAXPLAYERS+1] = false;
 
 // Keyvalues file for attributes
 Handle g_hKeyvaluesAttributesFile = INVALID_HANDLE;
@@ -121,7 +126,7 @@ public void OnPluginStart()
 	g_fChangeWeaponOnTimer = CreateConVar("sm_tfrebalance_changetimer", "0",
 	"If higher than zero, the changes will be applied to weapons after a set timer (example: 0.25). "
 	... "Use this to increase compatibility with other plugins.", FCVAR_PROTECTED, true, 0.0);
-	
+
 	g_bTimerOnlyAffectsBots = CreateConVar("sm_tfrebalance_timer_onlybots", "0",
 	"If enabled, sm_tfrebalance_changetimer will only affect to bots only. Default = 1, 0 to disable.",
 	FCVAR_PROTECTED, true, 0.0, true, 1.0);
@@ -145,6 +150,9 @@ public void OnPluginStart()
 	// We create a config file that generates the ConVars that this plugin has.
 	AutoExecConfig(true, "tf2rebalance_commands");
 	
+	// The weapon transparency cookie:
+	g_CookieWeaponVis = RegClientCookie("tfrebalance_weaponvis", "Cookie that contains if weapons should be transparent for the user.", CookieAccess_Public);
+	
 	// Admin command that refreshses the tf2rebalance_attributes file.
 	RegAdminCmd("sm_tfrebalance_refresh", Rebalance_RefreshFile, ADMFLAG_ROOT,
 	"Refreshes the attributes gotten through the file without needing to change maps. Depending on file size, it might cause a lag spike, so be careful.");
@@ -154,20 +162,17 @@ public void OnPluginStart()
 	HookEvent("post_inventory_application", Event_PlayerSpawn);
 	
 	// Commands for the players.
-	// Weapon information command:
-	RegConsoleCmd("sm_weapon_info", WeaponHelp, "Displays info for the rebalanced weapon the player is holding");
-	RegConsoleCmd("sm_weapon_information", WeaponHelp, "Displays info for the rebalanced weapon the player is holding");
-	RegConsoleCmd("sm_weapon_changes", WeaponHelp, "Displays info for the rebalanced weapon the player is holding");
+	RegConsoleCmd("sm_official", RebalancedHelp, "Displays info for rebalanced weapons.");
+	RegConsoleCmd("sm_changes", RebalancedHelp, "Displays info for rebalanced weapons.");
+	RegConsoleCmd("sm_change", RebalancedHelp, "Displays info for rebalanced weapons.");
 	
-	// Class information command:
-	RegConsoleCmd("sm_class_info", ClassHelp, "Displays info for the rebalanced class");
-	RegConsoleCmd("sm_class_information", ClassHelp, "Displays info for the rebalanced class");
-	RegConsoleCmd("sm_class_changes", ClassHelp, "Displays info for the rebalanced class");
+	// Can't see command:
+	RegConsoleCmd("sm_transparent", WeaponTransparency, "Makes your active weapon transparent.");
+	RegConsoleCmd("sm_transparency", WeaponTransparency, "Makes your active weapon transparent.");
+	RegConsoleCmd("sm_cantsee", WeaponTransparency, "Makes your active weapon transparent.");
 	
-	// Wearable information command:
-	RegConsoleCmd("sm_wearable_info", WearableHelp, "Displays info for the rebalanced wearables");
-	RegConsoleCmd("sm_wearable_information", WearableHelp, "Displays info for the rebalanced wearables");
-	RegConsoleCmd("sm_wearable_changes", WearableHelp, "Displays info for the rebalanced wearables");
+	// Translations:
+	LoadTranslations("tf2rebalance.phrases");
 }
 
 public void OnMapStart()
@@ -175,28 +180,36 @@ public void OnMapStart()
 	WipeStoredAttributes(); // Function that sets every Rebalance_* variable and the Handle to 0/INVALID_HANDLE;
 	if (GetAndStoreWeaponAttributes()) // Function that stores the weapon changes on the variables.
 	{
-		PrintToServer("[TFRebalance %s] Stored %i weapons and %i classes in total to change.", PLUGIN_VERSION,
-		g_iRebalance_ItemIndexChangesNumber, g_iRebalance_ClassChangesNumber);
+		// Stored %i weapons and %i classes in total to change.
+		PrintToServer("[TFRebalance] %T", "TFRebalance_StoredItems",
+		LANG_SERVER, g_iRebalance_ItemIndexChangesNumber, g_iRebalance_ClassChangesNumber);
 	}
 	
 	// We try to see if the current map is an MvM one.
 	if (GameRules_GetProp("m_bPlayingMannVsMachine"))
-	{
 		g_bIsMVM = true;
-	}
 	
 	// If any of the (optional) requirements aren't loaded, we log that in just in case.
 	if (g_bLogMissingDependencies.BoolValue) // That is, if this convar is set to true.
 	{
+		// tf2attributes is not loaded. This will prevent the plugin from adding attributes on classes.
 		if (!g_bIsTF2AttributesEnabled)
-			LogMessage("[TFRebalance %s] tf2attributes is not loaded. "
-			... "This will prevent the plugin from adding attributes on classes.", PLUGIN_VERSION);
+			LogMessage("[TFRebalance] %T", "TFRebalance_TF2Attributes_NoLoad", LANG_SERVER);
 	}
+}
+
+public void OnClientCookiesCached(int iClient)
+{
+	char cValue[8];
+	GetClientCookie(iClient, g_CookieWeaponVis, cValue, sizeof(cValue));
+	
+	int iValue = StringToInt(cValue);
+	g_bWeaponVis[iClient] = view_as<bool>(iValue);
 }
 
 // We check if tf2attributes exist or not.
 public void OnLibraryAdded(const char[] cName)
-{	
+{
 	if (StrEqual(cName, "tf2attributes", true)) g_bIsTF2AttributesEnabled = true;
 }
 
@@ -211,35 +224,77 @@ public Action Rebalance_RefreshFile(int iClient, int iArgs)
 	WipeStoredAttributes(); // Function that sets every Rebalance_* variable and the Handle to 0/INVALID_HANDLE;
 	if (GetAndStoreWeaponAttributes()) // Function that stores the weapon changes on the variables.
 	{
-		PrintToServer("[TFRebalance %s] Stored %i weapons and %i classes in total to change.", PLUGIN_VERSION,
-		g_iRebalance_ItemIndexChangesNumber, g_iRebalance_ClassChangesNumber);
+		// Stored %i weapons and %i classes in total to change.
+		PrintToServer("[TFRebalance] %T", "TFRebalance_StoredItems",
+		LANG_SERVER, g_iRebalance_ItemIndexChangesNumber, g_iRebalance_ClassChangesNumber);
 	}
 	
 	return Plugin_Handled;
 }
 
-// Command that displays info about the choosen weapons.
-public Action WeaponHelp(int iClient, int iArgs)
+// Command that makes weapon transparent (this is basically ripped from randomizer, so credit to Flaminsarge)
+public Action WeaponTransparency(int iClient, int iArgs)
 {
-	if (IsValidClient(iClient) && IsPlayerAlive(iClient) &&
-	g_bEnablePlugin.BoolValue)
-		CreateBalanceMenu(iClient, HelpType_Weapon);
-}
+	if (!g_bEnablePlugin.BoolValue)
+	{
+		//  The plugin is not enabled. We can not make your weapons transparent.
+		ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_Disabled_NoTransparency");
+		return Plugin_Handled;
+	}
+	else if (!IsValidClient(iClient))
+	{
+		// You're not a valid player (are you rcon? the console?)
+		ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_InvalidPlayer");
+		return Plugin_Handled;
+	}
+	else if (TF2_GetPlayerClass(iClient) == TFClass_Unknown)
+	{
+		// We can only make your weapons transparent if you spawn in as a class.
+		ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_InvalidClass_NoTransparency");
+		return Plugin_Handled;
+	}
 
-// Command that displays info about the choosen class.
-public Action ClassHelp(int iClient, int iArgs)
-{
-	if (IsValidClient(iClient) && IsPlayerAlive(iClient) &&
-	g_bEnablePlugin.BoolValue)
-		CreateBalanceMenu(iClient, HelpType_Class);
-}
+	char cPreference[32];
+	
+	if (g_bWeaponVis[iClient])
+	{
+		for	(int i = 0; i <= TFWeaponSlot_Melee; i++)
+		{
+			int iWeaponFromSlot = GetPlayerWeaponSlot(iClient, i);
+		
+			if (IsValidEntity(iWeaponFromSlot) && iWeaponFromSlot > MAXPLAYERS+1)
+			{
+				SetEntityRenderMode(iWeaponFromSlot, RENDER_NORMAL);
+				SetEntityRenderColor(iWeaponFromSlot, 255, 255, 255, 255);
+			}
+		}
+		
+		g_bWeaponVis[iClient] = false;
+		// Your weapons have returned to normal.
+		ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_NormalWeapon");
+	}
+	else
+	{
+		for	(int i = 0; i <= TFWeaponSlot_Melee; i++)
+		{
+			int iWeaponFromSlot = GetPlayerWeaponSlot(iClient, i);
+		
+			if (IsValidEntity(iWeaponFromSlot) && iWeaponFromSlot > MAXPLAYERS+1)
+			{
+				SetEntityRenderMode(iWeaponFromSlot, RENDER_TRANSCOLOR);
+				SetEntityRenderColor(iWeaponFromSlot, 255, 255, 255, 100);
+			}
+		}
+	
+		g_bWeaponVis[iClient] = true;
+		// Your weapons are now transparent.
+		ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_TransparentWeapon");
+	}
+	
+	Format(cPreference, sizeof(cPreference), "%i", g_bWeaponVis[iClient]);
+	SetClientCookie(iClient, g_CookieWeaponVis, cPreference);
 
-// Command that displays info about the choosen wearables.
-public Action WearableHelp(int iClient, int iArgs)
-{
-	if (IsValidClient(iClient) && IsPlayerAlive(iClient) &&
-	g_bEnablePlugin.BoolValue)
-		CreateBalanceMenu(iClient, HelpType_Wearable);
+	return Plugin_Handled;
 }
 
 public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroadcast)
@@ -251,9 +306,8 @@ public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroa
 		// We tell the player, only on their first spawn, that their weapons and class are modified.
 		if (!g_bFirstSpawn[iClient] && g_bFirstTimeInfoOnSpawn.BoolValue)
 		{
-			CPrintToChat(iClient,
-			"{unique}The weapons you'll play with have been modified and balanced by this server.\n"
-			... "Type /weapon_info, /class_info or /wearable_info to learn more about what changed.");
+			// The weapons you'll play with have been modified and balanced by this server.\nType /changes to learn more about what changed.
+			CPrintToChat(iClient, "{unique}%t", "TFRebalance_CustomWarning");
 			g_bFirstSpawn[iClient] = true;
 		}
 	
@@ -293,6 +347,23 @@ public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroa
 			else if (g_bTimerOnlyAffectsBots && !IsFakeClient(iClient)) return Plugin_Handled;
 			
 			CreateTimer(g_fChangeWeaponOnTimer.FloatValue, Timer_ChangeWeapons, iClient, TIMER_FLAG_NO_MAPCHANGE);
+		}
+		
+		if (g_bWeaponVis[iClient] == true)
+		{
+			for	(int i = 0; i <= TFWeaponSlot_Melee; i++)
+			{
+				int iWeaponFromSlot = GetPlayerWeaponSlot(iClient, i);
+		
+				if (IsValidEntity(iWeaponFromSlot) && iWeaponFromSlot > MAXPLAYERS+1)
+				{
+					if (GetEntityRenderMode(iWeaponFromSlot) == RENDER_NORMAL)
+					{
+						SetEntityRenderMode(iWeaponFromSlot, RENDER_TRANSCOLOR);
+						SetEntityRenderColor(iWeaponFromSlot, 255, 255, 255, 100);
+					}
+				}
+			}
 		}
 	}
 	
@@ -419,16 +490,16 @@ public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
 							float fAttribValues[16];
 							iNumOfStaticAttributes = TF2Attrib_GetStaticAttribs(g_iRebalance_ItemIndexDef[i], iAttribIndexes, fAttribValues) - 1;
 							
-							// We set the total attributes to be the static ones + the ones we wanna add.
-							iNumOfTotalAttributes = iNumOfStaticAttributes + g_iRebalance_ItemAttribute_AddNumber[i];
-							TF2Items_SetNumAttributes(hWeaponReplacement, iNumOfTotalAttributes);
-							
 							// Attribute additions:
 							// We'll add the static attributes first.
 							if (g_bDebugGiveWeapons.BoolValue)
 							{
 								PrintToServer("Keepattribs is enabled. Static attribute total: %i", iNumOfStaticAttributes);
 							}
+							
+							// We set the total attributes to be the static ones + the ones we wanna add.
+							iNumOfTotalAttributes = iNumOfStaticAttributes + g_iRebalance_ItemAttribute_AddNumber[i];
+							TF2Items_SetNumAttributes(hWeaponReplacement, iNumOfTotalAttributes);
 							
 							while (iAdded <= iNumOfStaticAttributes)
 							{
@@ -619,184 +690,359 @@ public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItem
 	return Plugin_Continue;
 }
 
-public Action CreateBalanceMenu(int iClient, HelpType htTypeOfHelp)
+public Action RebalancedHelp(int iClient, int iArgs)
 {
-	Handle hMenu = CreatePanel(); // We create a panel.
-	// The char that contains the descriptions we'll add.
-	char cChanges[MAXIMUM_DESCRIPTIONLIMIT] = "Here's the changes:\n";
-	int iWeapon = -1, iWeaponIndex = -1, iActiveWeapon = -1;
-	bool bChanged = false;
-	
-	// If the client is valid and he's alive...
-	if (IsValidClient(iClient) && IsPlayerAlive(iClient))
+	// We check over here if the client is valid.
+	if (!IsValidClient(iClient))
 	{
-		// We get the client's class
-		TFClassType tfClass = TF2_GetPlayerClass(iClient);
+		ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_InvalidPlayer");
+		return Plugin_Handled;
+	}
 	
-		switch (htTypeOfHelp)
+	// We create the handle for the menu we wish to create.
+	Handle hRebalanceMenu = INVALID_HANDLE;
+	hRebalanceMenu = CreateMenu(RebalancePanel);
+
+	bool bWasAChangeMade = false;
+	
+	// We get the class of the player.
+	TFClassType iClientClass = TF2_GetPlayerClass(iClient);
+	// Int that indicates if the selection should show.
+	int iClassStyle = ITEMDRAW_IGNORE;
+	
+	// If changes were made to the class and if it has a description, then we set the item
+	// style to default (it will show).
+	if (g_bRebalance_ClassChanged[iClientClass] && g_bRebalance_DoesClassHaveDescription[iClientClass])
+	{
+		iClassStyle = ITEMDRAW_DEFAULT;
+		bWasAChangeMade = true;
+	}
+	// We add the class menu item. It will or will not show depending if there's a change in the class.
+	char cCurrentClass[64]; // Localizable string.
+	Format(cCurrentClass, sizeof(cCurrentClass), "%T", "TFRebalance_CurrentClass", iClient);
+	AddMenuItem(hRebalanceMenu, "#class", cCurrentClass, iClassStyle);
+	
+	// Weapon Items
+	// We check through all of the player's slots, and make a item menu
+	// for each slot that has changes.
+	for (int i = 0; i <= TFWeaponSlot_PDA; i++)
+	{
+		// cInfoString will contain the info for the menu item.
+		// cSlotName is the string with the slot name meant for the item display.
+		char cInfoString[16] = "#slot", cSlotName[64];
+		// Ints for menu item style and the entity in the weapon slot, if any.
+		int iWeaponStyle = ITEMDRAW_IGNORE, iWeaponSlotEntity = -1;
+		
+		// Switch statement that modifies the slotname string to be
+		// the adequate one to display.
+		switch (i)
 		{
-			case HelpType_Weapon: // We get the descriptions of the current weapon.
+			case TFWeaponSlot_Primary: 		Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_Primary", iClient);
+			case TFWeaponSlot_Secondary: 	Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_Secondary", iClient);
+			case TFWeaponSlot_Melee: 		Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_Melee", iClient);
+			case TFWeaponSlot_Grenade: 		Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_Grenade", iClient);
+			case TFWeaponSlot_Building: 	Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_Building", iClient);
+			case TFWeaponSlot_PDA: 			Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_PDA", iClient);
+		}
+		
+		// We turn the slot int into a string to put it on the infostring
+		// meant for the menu item.
+		char cItemSlot[2];
+		IntToString(i, cItemSlot, sizeof(cItemSlot));
+		StrCat(cInfoString, sizeof(cInfoString), cItemSlot);
+		
+		// We get the weapon entity from the slot if any.
+		iWeaponSlotEntity = GetPlayerWeaponSlot(iClient, i);
+		// We make sure the entity exists here before we proceed.
+		if (iWeaponSlotEntity != -1 && IsValidEntity(iWeaponSlotEntity))
+		{
+			// We get the weapon's def index, if it's valid we'll cycle through all the weapons
+			// that have changes.
+			int iWeaponIndex = GetEntProp(iWeaponSlotEntity, Prop_Send, "m_iItemDefinitionIndex");
+			if (iWeaponIndex != -1)
 			{
-				// We get the active weapon and we see if it exists.
-				iActiveWeapon = GetEntPropEnt(iClient, Prop_Send, "m_hActiveWeapon");
-				if (iActiveWeapon != -1)
-				{
-					// We get the item index ID and we see if it's valid.
-					iWeaponIndex = GetEntProp(iActiveWeapon, Prop_Send, "m_iItemDefinitionIndex");
-					if (iWeaponIndex != -1)
-					{
-						// We cycle through the stored weapon IDs.
-						for (int i = 0; i <= g_iRebalance_ItemIndexChangesNumber; i++)
-						{			
-							//PrintToServer("Cycling through weapons to find description for %i", iWeaponIndex);
-							// If a weapon's definition index matches with the one stored...
-							if (iWeaponIndex == g_iRebalance_ItemIndexDef[i])
-							{				
-								// We add the information in.
-								StrCat(cChanges, sizeof(cChanges),
-								g_cRebalance_ItemDescription[i]);
-								// New line for each weapon.
-								StrCat(cChanges, sizeof(cChanges), "\n");
-								//PrintToServer("Found description for %i: %s)", iWeaponIndex,
-								//g_cRebalance_ItemDescription[g_iRebalance_ItemIndexChangesNumber]);
-								if (g_bRebalance_DoesItemHaveDescription[i]) bChanged = true;
-							}
-						}				
+				// We cycle through the stored weapon IDs.
+				for (int j = 0; j <= g_iRebalance_ItemIndexChangesNumber; j++)
+				{			
+					// If a weapon's definition index matches with the one stored...
+					if (iWeaponIndex == g_iRebalance_ItemIndexDef[j])
+					{			
+						// Then we'll display the item, as it is a weapon with changes.
+						iWeaponStyle = ITEMDRAW_DEFAULT;
+						bWasAChangeMade = true;
+						// We don't need to cycle through the rest.
+						break;
+					}
+				}				
+			}
+		}
+		
+		// We add the menu item for the slot we processed.
+		AddMenuItem(hRebalanceMenu, cInfoString, cSlotName, iWeaponStyle);
+	}
+	
+	// Cosmetic items
+	// Ints for the wearable entity and the itemdraw style.
+	int iWearableItem = -1, iWearableStyle = ITEMDRAW_IGNORE;
+	
+	// These are the kinds of wearable entities we check:
+	#define WEARABLELIST_INDEX 2
+	static const char cWearableTypes[WEARABLELIST_INDEX][] =
+	{
+		"tf_wearable_demoshield",
+		"tf_wearable"
+	};
+	
+	// We cycle through the wearable types...
+	for (int i = 0; i <= WEARABLELIST_INDEX - 1; i++)
+	{
+		// We try to find wearable items that belong to the client.
+		while ((iWearableItem = FindEntityByClassname(iWearableItem, cWearableTypes[i])) != -1) // Regular hats.
+		{
+			// We check for the wearable's item def index and its owner.
+			int iWearableIndex = GetEntProp(iWearableItem, Prop_Send, "m_iItemDefinitionIndex");
+			int iWearableOwner = GetEntPropEnt(iWearableItem, Prop_Send, "m_hOwnerEntity");
+			
+			// If the owners match.
+			if (iWearableOwner == iClient)
+			{
+				// Going through all items.
+				for (int k = 0; k <= g_iRebalance_ItemIndexChangesNumber; k++)
+				{			
+					// If a weapon's definition index matches with the one stored...
+					if (iWearableIndex == g_iRebalance_ItemIndexDef[k])
+					{				
+						// Then we'll display the item, as it is a weapon with changes.
+						iWearableStyle = ITEMDRAW_DEFAULT;
+						bWasAChangeMade = true;
+						// We don't need to cycle through the rest.
+						break;
 					}
 				}
 			}
-			case HelpType_Class: // We get the description of class.
+		}
+	}
+	// We add one singular item - we don't need to add multiple for each cosmetic.
+	// It's just for display purposes after all.
+	char cCosmetics[64]; // Localizable string
+	Format(cCosmetics, sizeof(cCosmetics), "%T", "TFRebalance_Cosmetics", iClient);
+	AddMenuItem(hRebalanceMenu, "#cosmetic", cCosmetics, iWearableStyle);
+	
+	char cTitle[128]; // Localizable string;
+	if (!bWasAChangeMade)
+		CPrintToChat(iClient, "{red}%t", "TFRebalance_NoChange");
+	else
+		Format(cTitle, sizeof(cTitle), "%T", "TFRebalance_InfoChoose", iClient);
+		
+	SetMenuTitle(hRebalanceMenu, cTitle);
+	
+	// We finally display the menu.
+	DisplayMenu(hRebalanceMenu, iClient, MENU_TIME_FOREVER);
+	
+	return Plugin_Handled;
+}
+
+public int RebalancePanel(Handle hMenu, MenuAction maAction, int iParam1, int iParam2)
+{
+	// Switch will all menuactions (we're really only using Select, though...)
+	switch(maAction)
+	{
+		// If someone selects an action (iParam1 = client, iParam2 = item)
+		case MenuAction_Select:
+		{
+			// We create a char with the menu item info and another
+			// char that will contain the item description
+			char cInfo[32], cThingInformation[MAXIMUM_DESCRIPTIONLIMIT];
+			// We get a bool that makes sure if our item exists, also
+			// cInfo gets the item info string.
+			bool bFound = GetMenuItem(hMenu, iParam2, cInfo, sizeof(cInfo));
+			// Debug string
+			// PrintToConsole(iParam1, "You selected item: %d (found? %d info: %s)", iParam2, bFound, cInfo);
+			
+			// If the menu item exists.
+			if (bFound)
 			{
-				if (g_bRebalance_ClassChanged[tfClass])
+				// We create a handle and a menu for the handle.
+				Handle hRebalanceInfo = INVALID_HANDLE;
+				hRebalanceInfo = CreateMenu(RebalanceInformation);
+			
+				// Has the user selected a class?
+				if (StrEqual(cInfo, "#class"))
 				{
-					//PrintToServer("Class info (%i): %s)", tfClass,
-					//g_cRebalance_ClassDescription[tfClass]);
+					// PrintToConsole(iParam1, "Class was selected");
+					// We concatenate the class info string.
+					char cClassInfo[64]; // Localizable string
+					Format(cClassInfo, sizeof(cClassInfo), "%T", "TFRebalance_ClassInfo", iParam1);
+					StrCat(cThingInformation, sizeof(cThingInformation), cClassInfo);
+					StrCat(cThingInformation, sizeof(cThingInformation), "\n");
 					
-					StrCat(cChanges, sizeof(cChanges),
-					g_cRebalance_ClassDescription[tfClass]);
-					// New line after class.			
-					StrCat(cChanges, sizeof(cChanges), "\n");
-					
-					if (g_bRebalance_DoesClassHaveDescription[tfClass]) bChanged = true;
+					// We get the class of the client.
+					TFClassType iClass = TF2_GetPlayerClass(iParam1);
+					// If the class had changes and has a description, then we 
+					// concatenate the description to the title.
+					if (g_bRebalance_ClassChanged[iClass] && g_bRebalance_DoesClassHaveDescription[iClass])
+						StrCat(cThingInformation, sizeof(cThingInformation),
+							g_cRebalance_ClassDescription[iClass]);
 				}
-			}
-			case HelpType_Wearable: // We get the descriptions of wearables.
-			{
-				int WearableItem = -1;
-				
-				// These are the kinds of wearable entities we check:
-				#define WEARABLELIST_INDEX 2
-				static const char cWearableTypes[WEARABLELIST_INDEX][] =
+				// Has the user selected an item slot.
+				else if (StrContains(cInfo, "#slot") != -1)
 				{
-					"tf_wearable",
-					"tf_wearable_demoshield"
-				};
-				
-				for (int i = 0; i <= WEARABLELIST_INDEX - 1; i++)
-				{
-					while ((WearableItem = FindEntityByClassname(WearableItem, cWearableTypes[i])) != -1) // Regular hats.
+					// We get the slot int directly from the sixth character
+					// of the cInfo char.
+					int iSlot = StringToInt(cInfo[5]);
+					
+					// Chars that will contain the slot name string and the info bit.
+					char cSlotName[64], cInformation[128];
+					switch (iSlot)
 					{
-						int WearableIndex = GetEntProp(WearableItem, Prop_Send, "m_iItemDefinitionIndex");
-						int WearableOwner = GetEntPropEnt(WearableItem, Prop_Send, "m_hOwnerEntity");
+						case TFWeaponSlot_Primary: 		Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_Primary", iParam1);
+						case TFWeaponSlot_Secondary: 	Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_Secondary", iParam1);
+						case TFWeaponSlot_Melee: 		Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_Melee", iParam1);
+						case TFWeaponSlot_Grenade: 		Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_Grenade", iParam1);
+						case TFWeaponSlot_Building: 	Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_Building", iParam1);
+						case TFWeaponSlot_PDA: 			Format(cSlotName, sizeof(cSlotName), "%T", "TFRebalance_PDA", iParam1);
+					}
+					
+					// We format and concatenate these two strings into the main one.
+					Format(cInformation, sizeof(cInformation), "%T", "TFRebalance_WeaponInfo", iParam1, cSlotName);
+					StrCat(cThingInformation, sizeof(cThingInformation), cInformation);
+					StrCat(cThingInformation, sizeof(cThingInformation), "\n");
+					
+					// We get the player's weapon entity from the weapon slot
+					// which they selected on the previous menu.
+					int iWeaponInSlot = GetPlayerWeaponSlot(iParam1, iSlot);
+					// If the weapon entity is valid...
+					if (IsValidEntity(iWeaponInSlot) && iWeaponInSlot > MAXPLAYERS+1)
+					{
+						// We get the item's item def index.
+						int iWeaponDefinitionIndex = GetEntProp(iWeaponInSlot, Prop_Send, "m_iItemDefinitionIndex");
 						
-						if (WearableOwner == iClient)
-						{
-							// Going through all items.
-							for (int k = 0; k <= g_iRebalance_ItemIndexChangesNumber; k++)
-							{			
-								//PrintToServer("Cycling through weapons to find description for %i", iWeaponIndex);
-								// If a weapon's definition index matches with the one stored...
-								if (WearableIndex == g_iRebalance_ItemIndexDef[k])
-								{				
-									StrCat(cChanges, sizeof(cChanges),
-									g_cRebalance_ItemDescription[k]);
-									// New line for each weapon.
-									StrCat(cChanges, sizeof(cChanges), "\n");
-									//PrintToServer("Found description for %i: %s (i: %i)", iWeaponIndex,
-									//g_cRebalance_ItemDescription[g_iRebalance_ItemIndexChangesNumber]);
-									
-									if (g_bRebalance_DoesItemHaveDescription[k]) bChanged = true;
-								}
-							}
-						}
-					}
-				}
-				
-				// We get the parachute, which is technically a weapon, but the player can't hold it.
-				if (tfClass == TFClass_DemoMan || tfClass == TFClass_Soldier)
-				{
-					iWeapon = -1, iWeaponIndex = -1;
-					
-					switch (tfClass)
-					{
-						case TFClass_DemoMan: iWeapon = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Primary);
-						case TFClass_Soldier: iWeapon = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Secondary);
-					}
-					
-					if (iWeapon != -1)
-					{
-						// We get the item index ID and we see if it's valid.
-						iWeaponIndex = GetEntProp(iWeapon, Prop_Send, "m_iItemDefinitionIndex");
-						if (iWeaponIndex != -1 && iWeaponIndex == 1101)
+						// If it has one...
+						if (iWeaponDefinitionIndex != -1)
 						{
 							// We cycle through the stored weapon IDs.
 							for (int i = 0; i <= g_iRebalance_ItemIndexChangesNumber; i++)
 							{			
-								//PrintToServer("Cycling through weapons to find description for %i", iWeaponIndex);
 								// If a weapon's definition index matches with the one stored...
-								if (iWeaponIndex == g_iRebalance_ItemIndexDef[i])
+								if (iWeaponDefinitionIndex == g_iRebalance_ItemIndexDef[i])
 								{				
-									// We add the information in.
-									StrCat(cChanges, sizeof(cChanges),
-									g_cRebalance_ItemDescription[i]);
-									// New line for each weapon.
-									StrCat(cChanges, sizeof(cChanges), "\n");
-									//PrintToServer("Found description for %i: %s)", iWeaponIndex,
-									//g_cRebalance_ItemDescription[g_iRebalance_ItemIndexChangesNumber]);
-									
-									if (!bChanged && g_bRebalance_DoesItemHaveDescription[i])
-										bChanged = true;
+									// We concatenate the item's description onto the menu's title
+									// if it has any description at all.
+									if (g_bRebalance_DoesItemHaveDescription[i])
+									{
+										StrCat(cThingInformation, sizeof(cThingInformation),
+										g_cRebalance_ItemDescription[i]);
+										// We break the loop, there's no need to cycle through more.
+										break;
+									}
 								}
 							}				
 						}
 					}
 				}
+				// Has the user selected the cosmetic slot.
+				else if (StrEqual(cInfo, "#cosmetic"))
+				{
+					// PrintToConsole(iParam1, "Cosmetic selected");
+					
+					// We concatenate the info string onto the main string.
+					char cCosmeticInfo[64]; // Localizable string
+					Format(cCosmeticInfo, sizeof(cCosmeticInfo), "%T", "TFRebalance_CosmeticInfo", iParam1);
+					StrCat(cThingInformation, sizeof(cThingInformation), cCosmeticInfo);
+					StrCat(cThingInformation, sizeof(cThingInformation), "\n");
+					
+					// Cosmetic item entity index.
+					int iWearableItem = -1;
+					
+					// These are the kinds of wearable entities we check:
+					#define WEARABLELIST_INDEX 2
+					static const char cWearableTypes[WEARABLELIST_INDEX][] =
+					{
+						"tf_wearable_demoshield",
+						"tf_wearable"
+					};
+					
+					// Loop that will check through wearable types.
+					for (int i = 0; i <= WEARABLELIST_INDEX - 1; i++)
+					{
+						// We check through all entities in search of wearables.
+						while ((iWearableItem = FindEntityByClassname(iWearableItem, cWearableTypes[i])) != -1) // Regular hats.
+						{
+							// We get the item def index and owner of the wearable.
+							int iWearableIndex = GetEntProp(iWearableItem, Prop_Send, "m_iItemDefinitionIndex");
+							int iWearableOwner = GetEntPropEnt(iWearableItem, Prop_Send, "m_hOwnerEntity");
+							
+							// If the client and the wearable's owner is the same...
+							if (iWearableOwner == iParam1)
+							{
+								// Going through all items.
+								for (int j = 0; j <= g_iRebalance_ItemIndexChangesNumber; j++)
+								{			
+									// If a weapon's definition index matches with the one stored...
+									if (iWearableIndex == g_iRebalance_ItemIndexDef[j])
+									{	
+										// We concatenate the item's description onto the menu's title
+										// if it has any description at all.
+										if (g_bRebalance_DoesItemHaveDescription[j])
+										{
+											StrCat(cThingInformation, sizeof(cThingInformation),
+											g_cRebalance_ItemDescription[j]);
+											StrCat(cThingInformation, sizeof(cThingInformation),
+											"\n");
+											// We don't break the loop this time, as there could be
+											// multiple cosmetic items. Also we concatenate a new line.
+										}									
+									}
+								}
+							}
+						}
+					}
+				}
+				
+				// We fix new lines and percentages here.
+				ReplaceString(cThingInformation, sizeof(cThingInformation), "\\n", "\n");
+				ReplaceString(cThingInformation, sizeof(cThingInformation), "%", "%%");
+				// We set the title here, which contains the descriptions
+				// for whatever that was selected.
+				SetMenuTitle(hRebalanceInfo, cThingInformation);
+				
+				// We add a back button.
+				char cBack[64]; // Localizable string
+				Format(cBack, sizeof(cBack), "%T", "TFRebalance_Back", iParam1);
+				AddMenuItem(hRebalanceInfo, "#back", cBack);
+				// We finally display the menu to the client.
+				DisplayMenu(hRebalanceInfo, iParam1, MENU_TIME_FOREVER);
+			}
+		}
+	}
+ 
+	return 0;
+}
+
+public int RebalanceInformation(Handle hMenu, MenuAction maAction, int iParam1, int iParam2)
+{
+	// Switch will all menuactions (we're really only using Select, though...)
+	switch(maAction)
+	{
+		// If someone selects an action (iParam1 = client, iParam2 = item)
+		case MenuAction_Select:
+		{
+			char cInfo[32]; // We create a char with the menu item info
+			// We get a bool that makes sure if our item exists, also
+			// cInfo gets the item info string.
+			bool bFound = GetMenuItem(hMenu, iParam2, cInfo, sizeof(cInfo));
+			
+			if (bFound)
+			{
+				// We display the previous menu if the
+				// player wants to go back.
+				if (StrEqual(cInfo, "#back"))
+					RebalancedHelp(iParam1, 0);
 			}
 		}
 	}
 
-	// If there's any changes to show, we'll show 'em.
-	if (bChanged)
-	{
-		// Turns newlines on the keyvalues file into REAL newlines
-		ReplaceString(cChanges, sizeof(cChanges), "\\n", "\n");
-		DrawPanelText(hMenu, cChanges); // Draw description.
-		cChanges = "Got it";
-		DrawPanelItem(hMenu, cChanges); // Draw "accept" button.
-		
-		// We send the panel to the client.
-		SendPanelToClient(hMenu, iClient, BalancePanel, 60);	
-	}
-	else
-	{
-		switch (htTypeOfHelp)
-		{
-			case HelpType_Weapon: CPrintToChat(iClient, "{darkred}Your active weapon doesn't have a description we can give you.");
-			case HelpType_Class: CPrintToChat(iClient, "{darkred}Your class doesn't have a description we can give you.");
-			case HelpType_Wearable: CPrintToChat(iClient, "{darkred}Your wearable(s) don't or doesn't have (a) descriptions we can give you.");
-		}
-	}
-	
-	// We close the panel.
-	CloseHandle(hMenu);
-	return Plugin_Continue;
-}
-
-public int BalancePanel(Handle hMenu, MenuAction maAction, int param1, int param2)
-{
-	if (!IsValidClient(param1)) return;
-	if (maAction == MenuAction_Select || (maAction == MenuAction_Cancel && param2 == MenuCancel_Exit)) return;
-	return;
+	return 0;
 }
 
 public bool GetAndStoreWeaponAttributes()

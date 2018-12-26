@@ -1,0 +1,114 @@
+"Phrases"
+{
+	"TFRebalance_CustomWarning"
+	{
+		"en"			"The weapons you'll play with have been modified and balanced by this server.\nType /changes to learn more about what changed."
+	}
+
+	"TFRebalance_StoredItems"
+	{
+		"#format"		"{1:i},{2:i}"
+		"en"			"Stored {1} weapons and {2} classes in total to change."
+	}
+	
+	"TFRebalance_TF2Attributes_NoLoad"
+	{
+		"en"			"tf2attributes is not loaded. This will prevent the plugin from adding attributes on classes."
+	}
+	
+	"TFRebalance_Disabled_NoTransparency"
+	{
+		"en"			"The plugin is not enabled. We can not make your weapons transparent."		
+	}
+	
+	"TFRebalance_InvalidPlayer"
+	{
+		"en"			"You are not a valid player."
+	}
+	
+	"TFRebalance_InvalidClass_NoTransparency"
+	{
+		"en"			"We can only make your weapons transparent if you spawn in as a class."
+	}
+	
+	"TFRebalance_NormalWeapon"
+	{
+		"en"			"Your weapons have returned to normal."
+	}
+	
+	"TFRebalance_TransparentWeapon"
+	{
+		"en"			"Your weapons are now transparent."
+	}
+	
+	"TFRebalance_InfoChoose"
+	{
+		"en"			"Select an option to receive information from."
+	}
+	
+	"TFRebalance_NoChange"
+	{
+		"en"			"There does not seem to be any information that we can give you."
+	}
+	
+	"TFRebalance_CurrentClass"
+	{
+		"en"			"Current Class"
+	}
+	
+	"TFRebalance_Primary"
+	{
+		"en"			"Primary"
+	}
+	
+	"TFRebalance_Secondary"
+	{
+		"en"			"Secondary"
+	}
+	
+	"TFRebalance_Melee"
+	{
+		"en"			"Melee"
+	}
+	
+	"TFRebalance_Grenade"
+	{
+		"en"			"Grenade"
+	}
+	
+	"TFRebalance_Building"
+	{
+		"en"			"Watch"
+	}
+	
+	"TFRebalance_PDA"
+	{
+		"en"			"PDA"
+	}
+	
+	"TFRebalance_Cosmetics"
+	{
+		"en"			"Cosmetics"
+	}
+	
+	"TFRebalance_ClassInfo"
+	{
+		"en"			"Class Information:"
+	}
+	
+	"TFRebalance_WeaponInfo"
+	{
+		"#format"		"{1:s}"
+		"en"			"{1} Weapon Information:"
+	}
+	
+	"TFRebalance_CosmeticInfo"
+	{
+		"en"			"Cosmetic Information:"
+	}
+	
+	"TFRebalance_Back"
+	{
+		"en"			"Back"
+	}
+}
