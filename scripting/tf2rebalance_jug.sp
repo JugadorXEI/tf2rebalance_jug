@@ -15,22 +15,17 @@
 // MAXIMUM STUFF WE CAN ADD [NOTE: DON'T GO OVERBOARD WITH THIS OR THE PLUGIN WILL GO SLOW]
 #define MAXIMUM_ADDITIONS 255
 #define MAXIMUM_ATTRIBUTES 20
-#define MAXIMUM_DESCRIPTIONLIMIT 1000
+#define MAXIMUM_DESCRIPTIONLIMIT 475
 #define MAXIMUM_WEAPONSPERATTRIBUTESET 52
 //////////////////
 
-// 1.7.1: 
-// (Done) - Make command that makes weapons transparent.
-// (Done) - Create complex menu for weapon/class/wearable checking (/official, /changes, /change).
-// (Done) - Make various strings localizable (maybe potentially make descriptions localizable).
-
-/* Next update: 1.9.0:
-- Implement TF2 Item DB for COOL STUFF
-	- Probably make a weapon system where one weapon can give stats depending on the class.
-	- Dynamic information on descriptions (example {1} would be the first attribute name, {1:n} would be the first attribute value)
+/* Next update: 1.8.1
+- (Done) Fix /cantsee not working on class changes and map change
+- (Done) Add /o
+- (Done) Feature: add /refreshweapon for balanced weapons
 */
 
-#define PLUGIN_VERSION "v1.8.0"
+#define PLUGIN_VERSION "v1.8.1"
 
 public Plugin myinfo =
 {
@@ -153,9 +148,13 @@ public void OnPluginStart()
 	// The weapon transparency cookie:
 	g_CookieWeaponVis = RegClientCookie("tfrebalance_weaponvis", "Cookie that contains if weapons should be transparent for the user.", CookieAccess_Public);
 	
-	// Admin command that refreshses the tf2rebalance_attributes file.
+	// Admin commands
 	RegAdminCmd("sm_tfrebalance_refresh", Rebalance_RefreshFile, ADMFLAG_ROOT,
-	"Refreshes the attributes gotten through the file without needing to change maps. Depending on file size, it might cause a lag spike, so be careful.");
+	"Refreshes the attributes gotten through the file without needing to change maps. "
+	...	"Depending on file size, it might cause a lag spike, so be careful.");
+	RegAdminCmd("sm_refreshweapon", Rebalance_RefreshWeapon, ADMFLAG_CHEATS,
+	"Refreshes the held weapon(s) of the selected players, giving them their appropiate stats "
+	... "based on the item definition index of their weapon and the balance set for them.");
 	
 	// Let's hook the spawns and such.
 	HookEvent("player_spawn", Event_PlayerSpawn);
@@ -165,6 +164,7 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_official", RebalancedHelp, "Displays info for rebalanced weapons.");
 	RegConsoleCmd("sm_changes", RebalancedHelp, "Displays info for rebalanced weapons.");
 	RegConsoleCmd("sm_change", RebalancedHelp, "Displays info for rebalanced weapons.");
+	RegConsoleCmd("sm_o", RebalancedHelp, "Displays info for rebalanced weapons.");
 	
 	// Can't see command:
 	RegConsoleCmd("sm_transparent", WeaponTransparency, "Makes your active weapon transparent.");
@@ -173,6 +173,7 @@ public void OnPluginStart()
 	
 	// Translations:
 	LoadTranslations("tf2rebalance.phrases");
+	LoadTranslations("common.phrases");
 }
 
 public void OnMapStart()
@@ -230,6 +231,52 @@ public Action Rebalance_RefreshFile(int iClient, int iArgs)
 	}
 	
 	return Plugin_Handled;
+}
+
+public Action Rebalance_RefreshWeapon(int iClient, int iArgs)
+{
+	if (iArgs < 1)
+	{
+		ReplyToCommand(iClient, "[TFRebalance] Usage: sm_refreshweapon <#userid|name>");
+		return Plugin_Handled;
+	}
+
+	char cArgs[65];
+	GetCmdArg(1, cArgs, sizeof(cArgs));
+	
+	char cTargetName[MAX_TARGET_LENGTH];
+	int iTargetList[MAXPLAYERS], iTargetCount;
+	bool bTargetNameIsMultiLang;
+	
+	if ((iTargetCount = ProcessTargetString(
+			cArgs,
+			iClient,
+			iTargetList,
+			MAXPLAYERS,
+			COMMAND_FILTER_ALIVE,
+			cTargetName,
+			sizeof(cTargetName),
+			bTargetNameIsMultiLang)) <= 0)
+	{
+		ReplyToTargetError(iClient, iTargetCount);
+		return Plugin_Handled;
+	}
+	
+	for (int i = 0; i < iTargetCount; i++)
+		PerformRebalanceWeaponChange(iClient, iTargetList[i]);
+	
+	if (bTargetNameIsMultiLang)
+		ShowActivity2(iClient, "[TFRebalance] ", "%t", "TFRebalance_RefreshedWeapon", cTargetName);
+	else
+		ShowActivity2(iClient, "[TFRebalance] ", "%t", "TFRebalance_RefreshedWeapon", "_s", cTargetName);
+	
+	return Plugin_Handled;
+}
+
+void PerformRebalanceWeaponChange(int iClient, int iTarget)
+{
+	ChangeWeaponsToBalancedState(iTarget);
+	LogAction(iClient, iTarget, "\"%L\" changed weapons to rebalanced equivalens on \"%L\"", iClient, iTarget);
 }
 
 // Command that makes weapon transparent (this is basically ripped from randomizer, so credit to Flaminsarge)
@@ -297,6 +344,23 @@ public Action WeaponTransparency(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+public void SetWeaponsAsTransparent(int iClient)
+{
+	for	(int i = 0; i <= TFWeaponSlot_Melee; i++)
+	{
+		int iWeaponFromSlot = GetPlayerWeaponSlot(iClient, i);
+
+		if (IsValidEntity(iWeaponFromSlot) && iWeaponFromSlot > MAXPLAYERS+1)
+		{
+			if (GetEntityRenderMode(iWeaponFromSlot) == RENDER_NORMAL)
+			{
+				SetEntityRenderMode(iWeaponFromSlot, RENDER_TRANSCOLOR);
+				SetEntityRenderColor(iWeaponFromSlot, 255, 255, 255, 100);
+			}
+		}
+	}
+}
+
 public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroadcast)
 {
 	int iClient = GetClientOfUserId(GetEventInt(hEvent, "userid"));
@@ -344,40 +408,45 @@ public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroa
 		{	
 			// If the client is not eligible for a changed weapon, we stop this part of the plugin.
 			if (!IsClientEligibleForWeapon(iClient)) return Plugin_Handled;
-			else if (g_bTimerOnlyAffectsBots && !IsFakeClient(iClient)) return Plugin_Handled;
+			else if (g_bTimerOnlyAffectsBots.BoolValue && !IsFakeClient(iClient)) return Plugin_Handled;
 			
 			CreateTimer(g_fChangeWeaponOnTimer.FloatValue, Timer_ChangeWeapons, iClient, TIMER_FLAG_NO_MAPCHANGE);
 		}
 		
 		if (g_bWeaponVis[iClient] == true)
 		{
-			for	(int i = 0; i <= TFWeaponSlot_Melee; i++)
-			{
-				int iWeaponFromSlot = GetPlayerWeaponSlot(iClient, i);
-		
-				if (IsValidEntity(iWeaponFromSlot) && iWeaponFromSlot > MAXPLAYERS+1)
-				{
-					if (GetEntityRenderMode(iWeaponFromSlot) == RENDER_NORMAL)
-					{
-						SetEntityRenderMode(iWeaponFromSlot, RENDER_TRANSCOLOR);
-						SetEntityRenderColor(iWeaponFromSlot, 255, 255, 255, 100);
-					}
-				}
-			}
+			if (g_fChangeWeaponOnTimer.FloatValue > 0 && !g_bTimerOnlyAffectsBots.BoolValue)
+				CreateTimer(g_fChangeWeaponOnTimer.FloatValue, Timer_ChangeWeapons, iClient, TIMER_FLAG_NO_MAPCHANGE);
+			else
+				SetWeaponsAsTransparent(iClient);
 		}
 	}
 	
 	return Plugin_Continue;
 }
 
+// This timer function will make weapons transparent after some time.
+public Action Timer_MakeWeaponsTransparent(Handle hTimer, int iClient)
+{
+	if (IsValidClient(iClient) && IsPlayerAlive(iClient) && g_bEnablePlugin.BoolValue)
+		SetWeaponsAsTransparent(iClient);
+		
+	return Plugin_Continue;
+}
+
 // Timer function that will give weapons to a player if sm_tfrebalance_changetimer is higher than zero.
-// A bit dirty, but compatibility is compatibility.
 public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
+{
+	ChangeWeaponsToBalancedState(iClient);
+	return Plugin_Continue;
+}
+
+public void ChangeWeaponsToBalancedState(int iClient)
 {
 	// Is the client valid, are they alive and is the plugin enabled?
 	// We check if the client is alive in case they suicided or died really quickly.
 	if (IsValidClient(iClient) && IsPlayerAlive(iClient) && g_bEnablePlugin.BoolValue)
-	{	
+	{
 		// Various ints related to the client's weapons and their definition indexes.
 		int iPrimary, iPrimaryIndex, iSecondary, iSecondaryIndex, iMelee, iMeleeIndex, iBuilding, iBuildingIndex;
 		TFClassType iClass;
@@ -396,14 +465,14 @@ public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
 		// melee weapon and def index:
 		iMelee = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Melee);
 		if (iMelee != -1) iMeleeIndex = GetEntProp(iMelee, Prop_Send, "m_iItemDefinitionIndex");
-	
+
 		// building weapon and def index:
 		if (iClass == TFClass_Spy)
 		{
 			iBuilding = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Building);
 			if (iBuilding != -1) iBuildingIndex = GetEntProp(iBuilding, Prop_Send, "m_iItemDefinitionIndex");
 		}
-	
+
 		// Debug stuff:
 		// PrintToConsole(iClient, "iPrimary: %i (Index: %i)\niSecondary: %i (Index: %i)\niMelee: %i (Index: %i)", iPrimary, iPrimaryIndex, iSecondary, iSecondaryIndex, iMelee, iMeleeIndex);
 		
@@ -593,11 +662,8 @@ public Action Timer_ChangeWeapons(Handle hTimer, int iClient)
 					EquipPlayerWeapon(iClient, iNewIndex);
 				}
 			}
-		}		
-		
+		}
 	}
-	
-	return Plugin_Continue;
 }
 
 // This TF2Items forward changes the item after it's initialized.

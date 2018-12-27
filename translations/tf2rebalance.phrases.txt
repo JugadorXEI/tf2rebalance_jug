@@ -2,7 +2,7 @@
 {
 	"TFRebalance_CustomWarning"
 	{
-		"en"			"The weapons you'll play with have been modified and balanced by this server.\nType /changes to learn more about what changed."
+		"en"			"The weapons you'll play with have been modified and balanced by this server.\nType /official to learn more about what changed."
 	}
 
 	"TFRebalance_StoredItems"
@@ -110,5 +110,11 @@
 	"TFRebalance_Back"
 	{
 		"en"			"Back"
+	}
+	
+	"TFRebalance_RefreshedWeapon"
+	{
+		"#format"		"{1:t}"
+		"en"			"{1}'s weapons have been refreshed to its balanced counterpart."
 	}
 }
