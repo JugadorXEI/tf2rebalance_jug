@@ -23,15 +23,16 @@
 		// "sniper", "medic", and "spy"
 		
 		// This is a scout section. Any attributes or information added
-		// here will be attributed to this class.
+		// here will be attributed to the scout class.
 		"scout"
 		{
 			// The "info" key gives the class a description.
 			// This can potentially be used to give a brief description
 			// about the changes done to the player. By default, the
-			// description character limit is 1000 characters.
+			// description character limit is 475 characters.
 			// Typing \n will add a new line into the description.
-			// Players can see this info by typing /class_info in chat.
+			// Players can see this info by typing /official in chat,
+			// then by selecting "Class Changes".
 			// Adding this key isn't required, but recommended.
 			"info" "This is a cool info piece.\nAwesome!"
 		
@@ -48,7 +49,7 @@
 				// The "id" key indicates the id of the
 				// attribute you wish to add into the class.
 				// You can find them on the follwing website:
-				// http://optf2.com/440/attributes
+				// https://tf2b.com/attriblist.php
 				"id"    	"26" // move speed bonus
 				
 				// The "value" indicates the value of the
@@ -82,7 +83,7 @@
 	// This is a weapon section.
 	// Weapons are defined through their item definition IDs. These
 	// can be found here: 
-	// http://git.optf2.com/schema-tracking/plain/Team%20Fortress%202%20Client%20Schema?h=teamfortress2
+	// https://tf2b.com/itemlist.php
 	// "127" is the Direct Hit's item definition ID.
 	"127"
 	{
@@ -95,7 +96,8 @@
 		
 		// This is an "info" key. Works as explained like on the
 		// classes section above, but if a player wants to see
-		// its description, they must write /weapon_info instead.
+		// its description, they must write /official, then select
+		// its respective weapon slot.
 		"info"	"Direct Hit:\n- 25% jump height.\n- -50% less clip size."
 		
 		// Attributes can be added on weapons just like it was
@@ -142,9 +144,8 @@
 	"131"
 	{
 		// If a player wishes to see the description of their
-		// wearable-like items, then they must write /wearable_info.
-		// Same applies to the BASE Jumper even though it's technically
-		// not a wearable.
+		// wearable-like items, then they must write /official,
+		// then select Cosmetics.
 		"info"	"Why are you using a shield?"
 		
 		"keepattribs" "1"

@@ -1,7 +1,7 @@
 <a href='https://ko-fi.com/jugadorxei' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://az743702.vo.msecnd.net/cdn/kofi3.png?v=0' border='0' alt='Donate for more awesome plugins!' /></a>
 
 # Rebalanced Fortress 2
-This plugin allows you, through a file, to modify the attributes of (almost) very item in Team Fortress 2, including weapons, shields or even hats! If you think an item deserves more of the spotlight, or if you think a weapon is horribly broken, you will be able to change the attributes of such weapon to your heart's content. In addition, it's possible to add information related to those changes to let everyone know about what was changed. 
+This plugin allows you, through a file, to modify the attributes of (almost) every item in Team Fortress 2, including weapons, shields or even hats! If you think an item deserves more of the spotlight, or if you think a weapon is horribly broken, you will be able to change the attributes of such weapon to your heart's content. In addition, it's possible to add information related to those changes to let everyone know about what was changed. 
 
 ## Dependencies
 - TF2Items: https://forums.alliedmods.net/showthread.php?t=115100
