@@ -16,7 +16,7 @@
 	// needs to be the first section of the file.
 	// If you don't wish to modify any class, don't add this section.
 	"classes"
-    {
+	{
 		// Here, you can add a section for each class you want to add
 		// attributes on. These can be:
 		// "scout", "soldier", "pyro", "demoman", "heavy", "engineer",
