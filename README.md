@@ -36,6 +36,7 @@ This assumes you have SourceMod installed on your dedicated server. If not, go h
 * /tfrebalance_refresh (Root admin only): Parses tf2rebalance_attributes.txt again in case an item is in need of a hotfix, or for testing purposes.
 * /refreshweapon (Cheat flag): Can target players. Turns their currently-equipped weapons into the ones defined on the tf2rebalance_attributes.txt file (so if a player holds a Brass Beast without changes somehow, the command will give them the version that the plugin would give them by default).
 * /official (or /changes, or /change, or /o): Displays a menu that allows the player to see the information about their changed items and their class, if any.
+* /cantsee:  Makes all of the player's held weapons transparent for ease of use and to help visibility.
 ```
 
 Enjoy!
