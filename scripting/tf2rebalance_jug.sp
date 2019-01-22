@@ -11,6 +11,7 @@
 
 #pragma semicolon 1
 #pragma newdecls required
+#file "Rebalanced Fortress 2"
 
 // MAXIMUM STUFF WE CAN ADD [NOTE: DON'T GO OVERBOARD WITH THIS OR THE PLUGIN WILL GO SLOW]
 #define MAXIMUM_ADDITIONS 255
@@ -19,13 +20,7 @@
 #define MAXIMUM_WEAPONSPERATTRIBUTESET 52
 //////////////////
 
-/* Next update: 1.8.1
-- (Done) Fix /cantsee not working on class changes and map change
-- (Done) Add /o
-- (Done) Feature: add /refreshweapon for balanced weapons
-*/
-
-#define PLUGIN_VERSION "v1.8.1"
+#define PLUGIN_VERSION "v1.8.2"
 
 public Plugin myinfo =
 {
@@ -44,7 +39,9 @@ ConVar g_bItemPreserveAttributesDefault; // Convar that controls if the attribut
 ConVar g_fChangeWeaponOnTimer; // Convar that will change weapons or wearables after a set timer.
 ConVar g_bTimerOnlyAffectsBots; // Convar that'll make it so the timer function only affects bots.
 ConVar g_bGiveWeaponsToBots; // Convar that changes the weapons of bots.
+ConVar g_bApplyClassChangesToBots; // Convar that decides if class attributes should apply to bots.
 ConVar g_bGiveWeaponsToMvMBots; // Convar that changes the weapons of MvM bots.
+ConVar g_bApplyClassChangesToMvMBots; // Convar that decides if class attributes should apply to MvM bots.
 ConVar g_bDebugGiveWeapons; // Convar that throws debug messages about given weapons on the server console.
 ConVar g_bDebugKeyvaluesFile; // Convar that throws debug messages about keyvalues parsing on the server console.
 
@@ -130,8 +127,16 @@ public void OnPluginStart()
 	"Should Bots' weapons be changed by the plugin? Default = 1, 0 to disable.",
 	FCVAR_PROTECTED, true, 0.0, true, 1.0);
 	
+	g_bApplyClassChangesToBots = CreateConVar("sm_tfrebalance_bots_applyclassattribs", "1",
+	"Should class changes apply to Bots? Default = 1, 0 to disable.",
+	FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
 	g_bGiveWeaponsToMvMBots = CreateConVar("sm_tfrebalance_botsmvm_giveweapons", "0",
 	"Should MvM Bots' weapons be changed by the plugin? Enabling this could cause issues. Default = 0, 1 to enable.",
+	FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
+	g_bApplyClassChangesToMvMBots = CreateConVar("sm_tfrebalance_botsmvm_applyclassattribs", "0",
+	"Should class changes apply to MvM Bots? Enabling this could cause issues. Default = 0, 1 to enable",
 	FCVAR_PROTECTED, true, 0.0, true, 1.0);
 	
 	g_bDebugGiveWeapons = CreateConVar("sm_tfrebalance_debug_giveweapons", "0",
@@ -376,27 +381,35 @@ public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroa
 		}
 	
 		// This is the part where we give the player the attributes.
-		TF2Attrib_RemoveAll(iClient); // We remove all of the client's attributes so they don't stack or mesh together.
 		TFClassType tfClassModified = TF2_GetPlayerClass(iClient); // We fetch the client's class
 		
 		if (g_bIsTF2AttributesEnabled)
-		{
-			// If a weapon's definition index matches with the one stored...
-			if (g_bRebalance_ClassChanged[tfClassModified] == true)
-			{				
-				int iAdded = 1;
+		{		
+			// Extra validation to make sure CharacterAttributes don't get wiped off
+			// MvM giants and such.
+			if (CanClientReceiveClassAttributes(iClient))
+			{
+				// We wipe class attributes if they can receive them.
+				TF2Attrib_RemoveAll(iClient);
 				
-				// Attribute additions:
-				// As long as iAdded is less than the attributes we'll stored...
-				while (iAdded <= g_iRebalance_ClassAttribute_AddNumber[tfClassModified])
+				// If a weapon's definition index matches with the one stored...
+				if (g_bRebalance_ClassChanged[tfClassModified] == true)
 				{
-					//PrintToServer("Added %i to class", Rebalance_ClassAttribute_Add[tfClassModified][iAdded]);
-					// Then we'll add one attribute in.
-					TF2Attrib_SetByDefIndex(iClient, 
-					g_iRebalance_ClassAttribute_Add[tfClassModified][iAdded],
-					view_as<float>(g_fRebalance_ClassAttribute_AddValue[tfClassModified][iAdded]));
 					
-					iAdded++; // We increase one on this int.
+					int iAdded = 1;
+					
+					// Attribute additions:
+					// As long as iAdded is less than the attributes we'll stored...
+					while (iAdded <= g_iRebalance_ClassAttribute_AddNumber[tfClassModified])
+					{
+						//PrintToServer("Added %i to class", Rebalance_ClassAttribute_Add[tfClassModified][iAdded]);
+						// Then we'll add one attribute in.
+						TF2Attrib_SetByDefIndex(iClient, 
+						g_iRebalance_ClassAttribute_Add[tfClassModified][iAdded],
+						view_as<float>(g_fRebalance_ClassAttribute_AddValue[tfClassModified][iAdded]));
+						
+						iAdded++; // We increase one on this int.
+					}
 				}
 			}
 		}
@@ -1338,6 +1351,25 @@ public TFClassType GetTFClassTypeFromName(const char[] cName)
 	else if (StrEqual(cName, "engineer", false)) return TFClass_Engineer;
 
 	return TFClass_Unknown;
+}
+
+public bool CanClientReceiveClassAttributes(int iClient)
+{
+	if (IsFakeClient(iClient))
+	{
+		if (!g_bApplyClassChangesToBots.BoolValue) return false;
+		else
+		{
+			if (g_bIsMVM
+			&& TF2_GetClientTeam(iClient) == TFTeam_Blue
+			&& !g_bApplyClassChangesToMvMBots.BoolValue)
+			{
+				return false;
+			}
+		}
+	}
+	
+	return true;
 }
 
 public bool IsClientEligibleForWeapon(int iClient)
