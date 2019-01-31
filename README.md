@@ -29,7 +29,9 @@ This assumes you have SourceMod installed on your dedicated server. If not, go h
 * sm_tfrebalance_changetimer (Default: "0"): If higher than zero, the weapon changes will apply after the time specified on the ConVar (example: "0.2"). This can be used to increase compatibility between plugins.
 * sm_tfrebalance_timer_onlybots (Default: "0"): Indicates if sm_tfrebalance_changetimer should only affect bots.
 * sm_tfrebalance_bots_giveweapons (Default: "1"): Indicates if bots should be given changes to their weapons.
+* sm_tfrebalance_bots_applyclassattribs (Default: "1"): Should class changes apply to Bots?
 * sm_tfrebalance_botsmvm_giveweapons (Default: "0"): Indicates if MvM bots should have their weapons changed.
+* sm_tfrebalance_botsmvm_applyclassattribs (Default: "0"): Should class changes apply to MvM Bots?
 * sm_tfrebalance_debug_giveweapons (Default: "0"): Verbose debug mode that throws messages on the server console about what function is being used to give weapons, whose weapon is being parsed, if attributes are being kept, the index ID of the weapon, the ID of the attribute and the value of the attribute given.
 * sm_tfrebalance_debug_configfile (Default: "0"): Very verbose debug mode that displays on the server console what class or weapon is having attributes stored to for later usage for when a player spawns with such weapon or as such class.
 
