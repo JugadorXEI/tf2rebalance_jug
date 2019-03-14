@@ -20,7 +20,12 @@
 #define MAXIMUM_WEAPONSPERATTRIBUTESET 52
 //////////////////
 
-#define PLUGIN_VERSION "v1.8.2"
+// Command descriptions.
+#define REBALANCEDHELP_DESC "Displays info for rebalanced weapons."
+#define TRANSPARENCYHELP_DESC "Makes your weapons transparent. Input a value from 50 to 255 to change its transparency."
+//
+
+#define PLUGIN_VERSION "v1.8.3"
 
 public Plugin myinfo =
 {
@@ -42,12 +47,16 @@ ConVar g_bGiveWeaponsToBots; // Convar that changes the weapons of bots.
 ConVar g_bApplyClassChangesToBots; // Convar that decides if class attributes should apply to bots.
 ConVar g_bGiveWeaponsToMvMBots; // Convar that changes the weapons of MvM bots.
 ConVar g_bApplyClassChangesToMvMBots; // Convar that decides if class attributes should apply to MvM bots.
+ConVar g_iWepTransparencyMinValue; // The minimal value that the players can set their weapons transparent to.
+ConVar g_iWepTransparencyMaxValue; // The maximum value that the players can set their weapons transparent to.
 ConVar g_bDebugGiveWeapons; // Convar that throws debug messages about given weapons on the server console.
 ConVar g_bDebugKeyvaluesFile; // Convar that throws debug messages about keyvalues parsing on the server console.
 
 // Cookies
 Handle g_CookieWeaponVis = INVALID_HANDLE;
+Handle g_CookieWeaponVisValue = INVALID_HANDLE;
 bool g_bWeaponVis[MAXPLAYERS+1] = false;
+int g_iWeaponVisValue[MAXPLAYERS+1] = { 100, ... };
 
 // Keyvalues file for attributes
 Handle g_hKeyvaluesAttributesFile = INVALID_HANDLE;
@@ -139,6 +148,14 @@ public void OnPluginStart()
 	"Should class changes apply to MvM Bots? Enabling this could cause issues. Default = 0, 1 to enable",
 	FCVAR_PROTECTED, true, 0.0, true, 1.0);
 	
+	g_iWepTransparencyMinValue = CreateConVar("sm_tfrebalance_transparency_minvalue", "100",
+	"Minimum transparency value that the players can set their weapons to. Default = 100",
+	FCVAR_PROTECTED, true, 50.0, true, 225.0);
+	
+	g_iWepTransparencyMaxValue = CreateConVar("sm_tfrebalance_transparency_maxvalue", "225",
+	"Minimum transparency value that the players can set their weapons to. Default = 225",
+	FCVAR_PROTECTED, true, 50.0, true, 225.0);
+	
 	g_bDebugGiveWeapons = CreateConVar("sm_tfrebalance_debug_giveweapons", "0",
 	"Enables a verbose debug mode that shows which function is adding attributes into what weapon and displays it on the server console. "
 	... "Default = 0, 1 to enable.", FCVAR_PROTECTED, true, 0.0, true, 1.0);
@@ -152,6 +169,7 @@ public void OnPluginStart()
 	
 	// The weapon transparency cookie:
 	g_CookieWeaponVis = RegClientCookie("tfrebalance_weaponvis", "Cookie that contains if weapons should be transparent for the user.", CookieAccess_Public);
+	g_CookieWeaponVisValue = RegClientCookie("tfrebalance_weaponvis_value", "Cookie that contains how much transparency should weapons have.", CookieAccess_Private);
 	
 	// Admin commands
 	RegAdminCmd("sm_tfrebalance_refresh", Rebalance_RefreshFile, ADMFLAG_ROOT,
@@ -166,15 +184,15 @@ public void OnPluginStart()
 	HookEvent("post_inventory_application", Event_PlayerSpawn);
 	
 	// Commands for the players.
-	RegConsoleCmd("sm_official", RebalancedHelp, "Displays info for rebalanced weapons.");
-	RegConsoleCmd("sm_changes", RebalancedHelp, "Displays info for rebalanced weapons.");
-	RegConsoleCmd("sm_change", RebalancedHelp, "Displays info for rebalanced weapons.");
-	RegConsoleCmd("sm_o", RebalancedHelp, "Displays info for rebalanced weapons.");
+	RegConsoleCmd("sm_official", RebalancedHelp, REBALANCEDHELP_DESC);
+	RegConsoleCmd("sm_changes", RebalancedHelp, REBALANCEDHELP_DESC);
+	RegConsoleCmd("sm_change", RebalancedHelp, REBALANCEDHELP_DESC);
+	RegConsoleCmd("sm_o", RebalancedHelp, REBALANCEDHELP_DESC);
 	
 	// Can't see command:
-	RegConsoleCmd("sm_transparent", WeaponTransparency, "Makes your active weapon transparent.");
-	RegConsoleCmd("sm_transparency", WeaponTransparency, "Makes your active weapon transparent.");
-	RegConsoleCmd("sm_cantsee", WeaponTransparency, "Makes your active weapon transparent.");
+	RegConsoleCmd("sm_transparent", WeaponTransparency, TRANSPARENCYHELP_DESC);
+	RegConsoleCmd("sm_transparency", WeaponTransparency, TRANSPARENCYHELP_DESC);
+	RegConsoleCmd("sm_cantsee", WeaponTransparency, TRANSPARENCYHELP_DESC);
 	
 	// Translations:
 	LoadTranslations("tf2rebalance.phrases");
@@ -206,11 +224,20 @@ public void OnMapStart()
 
 public void OnClientCookiesCached(int iClient)
 {
-	char cValue[8];
-	GetClientCookie(iClient, g_CookieWeaponVis, cValue, sizeof(cValue));
+	char cIsEnabledValue[3], cHowMuchValue[4];
+	GetClientCookie(iClient, g_CookieWeaponVis, cIsEnabledValue, sizeof(cIsEnabledValue));
+	GetClientCookie(iClient, g_CookieWeaponVisValue, cHowMuchValue, sizeof(cHowMuchValue));
 	
-	int iValue = StringToInt(cValue);
+	int iValue = StringToInt(cIsEnabledValue);
 	g_bWeaponVis[iClient] = view_as<bool>(iValue);
+	
+	int iHowMuchValue = StringToInt(cHowMuchValue);
+	
+	if (iHowMuchValue <= 0) iHowMuchValue = 100; // default value before change
+	else if (iHowMuchValue < g_iWepTransparencyMinValue.IntValue) iHowMuchValue = g_iWepTransparencyMinValue.IntValue;
+	else if (iHowMuchValue > g_iWepTransparencyMaxValue.IntValue) iHowMuchValue = g_iWepTransparencyMaxValue.IntValue;
+	
+	g_iWeaponVisValue[iClient] = iHowMuchValue;
 }
 
 // We check if tf2attributes exist or not.
@@ -306,6 +333,32 @@ public Action WeaponTransparency(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 
+	if (iArgs > 0)
+	{
+		char cTransparencyValue[4];
+		GetCmdArg(1, cTransparencyValue, sizeof(cTransparencyValue));
+		int iTransparencyValue = StringToInt(cTransparencyValue);
+
+		if (iTransparencyValue < g_iWepTransparencyMinValue.IntValue)
+			iTransparencyValue = g_iWepTransparencyMinValue.IntValue;
+		
+		if (iTransparencyValue > g_iWepTransparencyMaxValue.IntValue)
+			iTransparencyValue = g_iWepTransparencyMaxValue.IntValue;
+			
+		IntToString(iTransparencyValue, cTransparencyValue, sizeof(cTransparencyValue));
+		
+		SetClientCookie(iClient, g_CookieWeaponVisValue, cTransparencyValue);
+		g_iWeaponVisValue[iClient] = iTransparencyValue;
+		
+		ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_ChangedTransparencyValue");
+		
+		if (g_bWeaponVis[iClient])
+		{
+			SetWeaponsAsTransparent(iClient);
+			return Plugin_Handled;
+		}
+	}
+
 	char cPreference[32];
 	
 	if (g_bWeaponVis[iClient])
@@ -327,17 +380,8 @@ public Action WeaponTransparency(int iClient, int iArgs)
 	}
 	else
 	{
-		for	(int i = 0; i <= TFWeaponSlot_Melee; i++)
-		{
-			int iWeaponFromSlot = GetPlayerWeaponSlot(iClient, i);
+		SetWeaponsAsTransparent(iClient);
 		
-			if (IsValidEntity(iWeaponFromSlot) && iWeaponFromSlot > MAXPLAYERS+1)
-			{
-				SetEntityRenderMode(iWeaponFromSlot, RENDER_TRANSCOLOR);
-				SetEntityRenderColor(iWeaponFromSlot, 255, 255, 255, 100);
-			}
-		}
-	
 		g_bWeaponVis[iClient] = true;
 		// Your weapons are now transparent.
 		ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_TransparentWeapon");
@@ -355,13 +399,10 @@ public void SetWeaponsAsTransparent(int iClient)
 	{
 		int iWeaponFromSlot = GetPlayerWeaponSlot(iClient, i);
 
-		if (IsValidEntity(iWeaponFromSlot) && iWeaponFromSlot > MAXPLAYERS+1)
+		if (IsValidEntity(iWeaponFromSlot))
 		{
-			if (GetEntityRenderMode(iWeaponFromSlot) == RENDER_NORMAL)
-			{
-				SetEntityRenderMode(iWeaponFromSlot, RENDER_TRANSCOLOR);
-				SetEntityRenderColor(iWeaponFromSlot, 255, 255, 255, 100);
-			}
+			SetEntityRenderMode(iWeaponFromSlot, RENDER_TRANSCOLOR);
+			SetEntityRenderColor(iWeaponFromSlot, 255, 255, 255, g_iWeaponVisValue[iClient]);
 		}
 	}
 }
@@ -864,43 +905,33 @@ public Action RebalancedHelp(int iClient, int iArgs)
 	// Ints for the wearable entity and the itemdraw style.
 	int iWearableItem = -1, iWearableStyle = ITEMDRAW_IGNORE;
 	
-	// These are the kinds of wearable entities we check:
-	#define WEARABLELIST_INDEX 2
-	static const char cWearableTypes[WEARABLELIST_INDEX][] =
+	// We cycle through the wearables
+	// We try to find wearable items that belong to the client.
+	while ((iWearableItem = FindEntityByClassname(iWearableItem, "tf_wearable*")) != -1) // Regular hats.
 	{
-		"tf_wearable_demoshield",
-		"tf_wearable"
-	};
-	
-	// We cycle through the wearable types...
-	for (int i = 0; i <= WEARABLELIST_INDEX - 1; i++)
-	{
-		// We try to find wearable items that belong to the client.
-		while ((iWearableItem = FindEntityByClassname(iWearableItem, cWearableTypes[i])) != -1) // Regular hats.
+		// We check for the wearable's item def index and its owner.
+		int iWearableIndex = GetEntProp(iWearableItem, Prop_Send, "m_iItemDefinitionIndex");
+		int iWearableOwner = GetEntPropEnt(iWearableItem, Prop_Send, "m_hOwnerEntity");
+		
+		// If the owners match.
+		if (iWearableOwner == iClient)
 		{
-			// We check for the wearable's item def index and its owner.
-			int iWearableIndex = GetEntProp(iWearableItem, Prop_Send, "m_iItemDefinitionIndex");
-			int iWearableOwner = GetEntPropEnt(iWearableItem, Prop_Send, "m_hOwnerEntity");
-			
-			// If the owners match.
-			if (iWearableOwner == iClient)
-			{
-				// Going through all items.
-				for (int k = 0; k <= g_iRebalance_ItemIndexChangesNumber; k++)
-				{			
-					// If a weapon's definition index matches with the one stored...
-					if (iWearableIndex == g_iRebalance_ItemIndexDef[k])
-					{				
-						// Then we'll display the item, as it is a weapon with changes.
-						iWearableStyle = ITEMDRAW_DEFAULT;
-						bWasAChangeMade = true;
-						// We don't need to cycle through the rest.
-						break;
-					}
+			// Going through all items.
+			for (int k = 0; k <= g_iRebalance_ItemIndexChangesNumber; k++)
+			{			
+				// If a weapon's definition index matches with the one stored...
+				if (iWearableIndex == g_iRebalance_ItemIndexDef[k])
+				{				
+					// Then we'll display the item, as it is a weapon with changes.
+					iWearableStyle = ITEMDRAW_DEFAULT;
+					bWasAChangeMade = true;
+					// We don't need to cycle through the rest.
+					break;
 				}
 			}
 		}
 	}
+	
 	// We add one singular item - we don't need to add multiple for each cosmetic.
 	// It's just for display purposes after all.
 	char cCosmetics[64]; // Localizable string
@@ -1033,45 +1064,34 @@ public int RebalancePanel(Handle hMenu, MenuAction maAction, int iParam1, int iP
 					// Cosmetic item entity index.
 					int iWearableItem = -1;
 					
-					// These are the kinds of wearable entities we check:
-					#define WEARABLELIST_INDEX 2
-					static const char cWearableTypes[WEARABLELIST_INDEX][] =
-					{
-						"tf_wearable_demoshield",
-						"tf_wearable"
-					};
-					
 					// Loop that will check through wearable types.
-					for (int i = 0; i <= WEARABLELIST_INDEX - 1; i++)
+					// We check through all entities in search of wearables.
+					while ((iWearableItem = FindEntityByClassname(iWearableItem, "tf_wearable*")) != -1) // Regular hats.
 					{
-						// We check through all entities in search of wearables.
-						while ((iWearableItem = FindEntityByClassname(iWearableItem, cWearableTypes[i])) != -1) // Regular hats.
+						// We get the item def index and owner of the wearable.
+						int iWearableIndex = GetEntProp(iWearableItem, Prop_Send, "m_iItemDefinitionIndex");
+						int iWearableOwner = GetEntPropEnt(iWearableItem, Prop_Send, "m_hOwnerEntity");
+						
+						// If the client and the wearable's owner is the same...
+						if (iWearableOwner == iParam1)
 						{
-							// We get the item def index and owner of the wearable.
-							int iWearableIndex = GetEntProp(iWearableItem, Prop_Send, "m_iItemDefinitionIndex");
-							int iWearableOwner = GetEntPropEnt(iWearableItem, Prop_Send, "m_hOwnerEntity");
-							
-							// If the client and the wearable's owner is the same...
-							if (iWearableOwner == iParam1)
-							{
-								// Going through all items.
-								for (int j = 0; j <= g_iRebalance_ItemIndexChangesNumber; j++)
-								{			
-									// If a weapon's definition index matches with the one stored...
-									if (iWearableIndex == g_iRebalance_ItemIndexDef[j])
-									{	
-										// We concatenate the item's description onto the menu's title
-										// if it has any description at all.
-										if (g_bRebalance_DoesItemHaveDescription[j])
-										{
-											StrCat(cThingInformation, sizeof(cThingInformation),
-											g_cRebalance_ItemDescription[j]);
-											StrCat(cThingInformation, sizeof(cThingInformation),
-											"\n");
-											// We don't break the loop this time, as there could be
-											// multiple cosmetic items. Also we concatenate a new line.
-										}									
-									}
+							// Going through all items.
+							for (int j = 0; j <= g_iRebalance_ItemIndexChangesNumber; j++)
+							{			
+								// If a weapon's definition index matches with the one stored...
+								if (iWearableIndex == g_iRebalance_ItemIndexDef[j])
+								{	
+									// We concatenate the item's description onto the menu's title
+									// if it has any description at all.
+									if (g_bRebalance_DoesItemHaveDescription[j])
+									{
+										StrCat(cThingInformation, sizeof(cThingInformation),
+										g_cRebalance_ItemDescription[j]);
+										StrCat(cThingInformation, sizeof(cThingInformation),
+										"\n");
+										// We don't break the loop this time, as there could be
+										// multiple cosmetic items. Also we concatenate a new line.
+									}									
 								}
 							}
 						}

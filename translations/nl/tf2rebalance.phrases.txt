@@ -1,0 +1,120 @@
+"Phrases"
+{
+	"TFRebalance_CustomWarning"
+	{
+		"nl"			"De wapens waarmee je speelt zijn gemodificeerd en gebalanceerd door deze server.\nTyp /official om meer te leren over wat er veranderd is."
+	}
+
+	"TFRebalance_StoredItems"
+	{
+		"#format"		"{1:i},{2:i}"
+		"nl"			"{1} wapens en {2} classes in totaal opgeslagen om te veranderen."
+	}
+	
+	"TFRebalance_TF2Attributes_NoLoad"
+	{
+		"nl"			"tf2attributes is niet geladen. Hierdoor kan de plugin geen attributen aan classes toevoegen."
+	}
+	
+	"TFRebalance_Disabled_NoTransparency"
+	{
+		"nl"			"De plugin is niet ingeschakeld. We kunnen je wapens niet transparant maken."	
+	}
+	
+	"TFRebalance_InvalidPlayer"
+	{
+		"nl"			"Je bent geen geldige speler."
+	}
+	
+	"TFRebalance_InvalidClass_NoTransparency"
+	{
+		"nl"			"We kunnen je wapens alleen transparant maken als je als een class spawnt."
+	}
+	
+	"TFRebalance_NormalWeapon"
+	{
+		"nl"			"Je wapens zijn weer normaal."
+	}
+	
+	"TFRebalance_TransparentWeapon"
+	{
+		"nl"			"Je wapens zijn nu transparant."
+	}
+	
+	"TFRebalance_InfoChoose"
+	{
+		"nl"			"Kies een optie om informatie over te ontvangen."
+	}
+	
+	"TFRebalance_NoChange"
+	{
+		"nl"			"Het ziet er naar uit dat er geen informatie beschikbaar is."
+	}
+	
+	"TFRebalance_CurrentClass"
+	{
+		"nl"			"Huidge Class"
+	}
+	
+	"TFRebalance_Primary"
+	{
+		"nl"			"Eerste Wapen"
+	}
+	
+	"TFRebalance_Secondary"
+	{
+		"nl"			"Tweede Wapen"
+	}
+	
+	"TFRebalance_Melee"
+	{
+		"nl"			"Handwapen"
+	}
+	
+	"TFRebalance_Grenade"
+	{
+		"nl"			"Granaat"
+	}
+	
+	"TFRebalance_Building"
+	{
+		"nl"			"Horloge"
+	}
+	
+	"TFRebalance_PDA"
+	{
+		"nl"			"PDA"
+	}
+	
+	"TFRebalance_Cosmetics"
+	{
+		"nl"			"Cosmetics"
+	}
+	
+	"TFRebalance_ClassInfo"
+	{
+		"nl"			"Class Informatie:"
+	}
+	
+	"TFRebalance_WeaponInfo"
+	{
+		"#format"		"{1:s}"
+		"nl"			"{1} Wapen Informatie:"
+	}
+	
+	"TFRebalance_CosmeticInfo"
+	{
+		"nl"			"Cosmetic Informatie:"
+	}
+	
+	"TFRebalance_Back"
+	{
+		"nl"			"Rug"
+	}
+	
+	"TFRebalance_RefreshedWeapon"
+	{
+		"#format"		"{1:t}"
+		"nl"			"{1}'s wapens zijn vernieuwd naar de gebalanceerde versie."
+	}
+}

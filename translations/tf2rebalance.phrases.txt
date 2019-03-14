@@ -117,4 +117,9 @@
 		"#format"		"{1:t}"
 		"en"			"{1}'s weapons have been refreshed to its balanced counterpart."
 	}
+	
+	"TFRebalance_ChangedTransparencyValue"
+	{
+		"en"			"The transparecy value for your weapons have been changed."
+	}
 }

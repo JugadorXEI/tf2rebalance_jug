@@ -117,4 +117,9 @@
 		"#format"		"{1:t}"
 		"es"			"Se ha refrescado las armas balanceadas de {1}."
 	}
+	
+	"TFRebalance_ChangedTransparencyValue"
+	{
+		"es"			"El valor de transparencia de tus armas ha sido cambiada."
+	}
 }
