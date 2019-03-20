@@ -22,10 +22,10 @@
 
 // Command descriptions.
 #define REBALANCEDHELP_DESC "Displays info for rebalanced weapons."
-#define TRANSPARENCYHELP_DESC "Makes your weapons transparent. Input a value from 50 to 255 to change its transparency."
+#define TRANSPARENCYHELP_DESC "Makes your weapons transparent."
 //
 
-#define PLUGIN_VERSION "v1.8.3"
+#define PLUGIN_VERSION "v1.8.4"
 
 public Plugin myinfo =
 {
@@ -47,16 +47,13 @@ ConVar g_bGiveWeaponsToBots; // Convar that changes the weapons of bots.
 ConVar g_bApplyClassChangesToBots; // Convar that decides if class attributes should apply to bots.
 ConVar g_bGiveWeaponsToMvMBots; // Convar that changes the weapons of MvM bots.
 ConVar g_bApplyClassChangesToMvMBots; // Convar that decides if class attributes should apply to MvM bots.
-ConVar g_iWepTransparencyMinValue; // The minimal value that the players can set their weapons transparent to.
-ConVar g_iWepTransparencyMaxValue; // The maximum value that the players can set their weapons transparent to.
+ConVar g_iWepTransparencyValue; // The value that the server can set the clients' weapons transparent to.
 ConVar g_bDebugGiveWeapons; // Convar that throws debug messages about given weapons on the server console.
 ConVar g_bDebugKeyvaluesFile; // Convar that throws debug messages about keyvalues parsing on the server console.
 
 // Cookies
 Handle g_CookieWeaponVis = INVALID_HANDLE;
-Handle g_CookieWeaponVisValue = INVALID_HANDLE;
 bool g_bWeaponVis[MAXPLAYERS+1] = false;
-int g_iWeaponVisValue[MAXPLAYERS+1] = { 100, ... };
 
 // Keyvalues file for attributes
 Handle g_hKeyvaluesAttributesFile = INVALID_HANDLE;
@@ -148,12 +145,8 @@ public void OnPluginStart()
 	"Should class changes apply to MvM Bots? Enabling this could cause issues. Default = 0, 1 to enable",
 	FCVAR_PROTECTED, true, 0.0, true, 1.0);
 	
-	g_iWepTransparencyMinValue = CreateConVar("sm_tfrebalance_transparency_minvalue", "100",
-	"Minimum transparency value that the players can set their weapons to. Default = 100",
-	FCVAR_PROTECTED, true, 50.0, true, 225.0);
-	
-	g_iWepTransparencyMaxValue = CreateConVar("sm_tfrebalance_transparency_maxvalue", "225",
-	"Minimum transparency value that the players can set their weapons to. Default = 225",
+	g_iWepTransparencyValue = CreateConVar("sm_tfrebalance_transparency_value", "200",
+	"Transparency value that the weapons will have when the players use /cantsee. Default = 200.",
 	FCVAR_PROTECTED, true, 50.0, true, 225.0);
 	
 	g_bDebugGiveWeapons = CreateConVar("sm_tfrebalance_debug_giveweapons", "0",
@@ -169,14 +162,13 @@ public void OnPluginStart()
 	
 	// The weapon transparency cookie:
 	g_CookieWeaponVis = RegClientCookie("tfrebalance_weaponvis", "Cookie that contains if weapons should be transparent for the user.", CookieAccess_Public);
-	g_CookieWeaponVisValue = RegClientCookie("tfrebalance_weaponvis_value", "Cookie that contains how much transparency should weapons have.", CookieAccess_Private);
 	
 	// Admin commands
 	RegAdminCmd("sm_tfrebalance_refresh", Rebalance_RefreshFile, ADMFLAG_ROOT,
 	"Refreshes the attributes gotten through the file without needing to change maps. "
 	...	"Depending on file size, it might cause a lag spike, so be careful.");
 	RegAdminCmd("sm_refreshweapon", Rebalance_RefreshWeapon, ADMFLAG_CHEATS,
-	"Refreshes the held weapon(s) of the selected players, giving them their appropiate stats "
+	"Refreshes the held weapon(s) of the selected players, giving them their appropriate stats "
 	... "based on the item definition index of their weapon and the balance set for them.");
 	
 	// Let's hook the spawns and such.
@@ -224,20 +216,11 @@ public void OnMapStart()
 
 public void OnClientCookiesCached(int iClient)
 {
-	char cIsEnabledValue[3], cHowMuchValue[4];
+	char cIsEnabledValue[3];
 	GetClientCookie(iClient, g_CookieWeaponVis, cIsEnabledValue, sizeof(cIsEnabledValue));
-	GetClientCookie(iClient, g_CookieWeaponVisValue, cHowMuchValue, sizeof(cHowMuchValue));
 	
 	int iValue = StringToInt(cIsEnabledValue);
 	g_bWeaponVis[iClient] = view_as<bool>(iValue);
-	
-	int iHowMuchValue = StringToInt(cHowMuchValue);
-	
-	if (iHowMuchValue <= 0) iHowMuchValue = 100; // default value before change
-	else if (iHowMuchValue < g_iWepTransparencyMinValue.IntValue) iHowMuchValue = g_iWepTransparencyMinValue.IntValue;
-	else if (iHowMuchValue > g_iWepTransparencyMaxValue.IntValue) iHowMuchValue = g_iWepTransparencyMaxValue.IntValue;
-	
-	g_iWeaponVisValue[iClient] = iHowMuchValue;
 }
 
 // We check if tf2attributes exist or not.
@@ -333,41 +316,14 @@ public Action WeaponTransparency(int iClient, int iArgs)
 		return Plugin_Handled;
 	}
 
-	if (iArgs > 0)
-	{
-		char cTransparencyValue[4];
-		GetCmdArg(1, cTransparencyValue, sizeof(cTransparencyValue));
-		int iTransparencyValue = StringToInt(cTransparencyValue);
-
-		if (iTransparencyValue < g_iWepTransparencyMinValue.IntValue)
-			iTransparencyValue = g_iWepTransparencyMinValue.IntValue;
-		
-		if (iTransparencyValue > g_iWepTransparencyMaxValue.IntValue)
-			iTransparencyValue = g_iWepTransparencyMaxValue.IntValue;
-			
-		IntToString(iTransparencyValue, cTransparencyValue, sizeof(cTransparencyValue));
-		
-		SetClientCookie(iClient, g_CookieWeaponVisValue, cTransparencyValue);
-		g_iWeaponVisValue[iClient] = iTransparencyValue;
-		
-		ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_ChangedTransparencyValue");
-		
-		if (g_bWeaponVis[iClient])
-		{
-			SetWeaponsAsTransparent(iClient);
-			return Plugin_Handled;
-		}
-	}
-
 	char cPreference[32];
-	
 	if (g_bWeaponVis[iClient])
 	{
 		for	(int i = 0; i <= TFWeaponSlot_Melee; i++)
 		{
 			int iWeaponFromSlot = GetPlayerWeaponSlot(iClient, i);
 		
-			if (IsValidEntity(iWeaponFromSlot) && iWeaponFromSlot > MAXPLAYERS+1)
+			if (IsValidEntity(iWeaponFromSlot))
 			{
 				SetEntityRenderMode(iWeaponFromSlot, RENDER_NORMAL);
 				SetEntityRenderColor(iWeaponFromSlot, 255, 255, 255, 255);
@@ -402,7 +358,7 @@ public void SetWeaponsAsTransparent(int iClient)
 		if (IsValidEntity(iWeaponFromSlot))
 		{
 			SetEntityRenderMode(iWeaponFromSlot, RENDER_TRANSCOLOR);
-			SetEntityRenderColor(iWeaponFromSlot, 255, 255, 255, g_iWeaponVisValue[iClient]);
+			SetEntityRenderColor(iWeaponFromSlot, 255, 255, 255, g_iWepTransparencyValue.IntValue);
 		}
 	}
 }
@@ -436,7 +392,6 @@ public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroa
 				// If a weapon's definition index matches with the one stored...
 				if (g_bRebalance_ClassChanged[tfClassModified] == true)
 				{
-					
 					int iAdded = 1;
 					
 					// Attribute additions:
