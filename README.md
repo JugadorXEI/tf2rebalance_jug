@@ -25,6 +25,7 @@ This assumes you have SourceMod installed on your dedicated server. If not, go h
 * sm_tfrebalance_enable (Default: "1"): Enables (1) or disables (0) the plugin.
 * sm_tfrebalance_logdependencies (Default: "1"): Should the lack of TF2Attributes be logged? 1 enables this, whereas 0 disables it instead.
 * sm_tfrebalance_firsttimeinfo (Default: "1"): Should the players, on their first spawn, be notified of the possibility of modified weapons and the commands to see such information? 1 enables this, whereas 0 disables it instead.
+* sm_tfrebalance_infoonspawn (Default: "0"): Every other spawn after the initial one, the player is notified if their weapons have changes. 0 is fully disabled, 1 enables it by default but can be toggled off by the player, 2 makes it toggleable, but disabled at first.
 * sm_tfrebalance_preserveattribsbydefault (Default: "0"): On file parsing, should the lack of a "keepattribs" key default to preserve (1) or not preserve (0) the attributes of the item?
 * sm_tfrebalance_changetimer (Default: "0"): If higher than zero, the weapon changes will apply after the time specified on the ConVar (example: "0.2"). This can be used to increase compatibility between plugins.
 * sm_tfrebalance_timer_onlybots (Default: "0"): Indicates if sm_tfrebalance_changetimer should only affect bots.
@@ -39,6 +40,7 @@ This assumes you have SourceMod installed on your dedicated server. If not, go h
 * /refreshweapon (Cheat flag): Can target players. Turns their currently-equipped weapons into the ones defined on the tf2rebalance_attributes.txt file (so if a player holds a Brass Beast without changes somehow, the command will give them the version that the plugin would give them by default).
 * /official (or /changes, or /change, or /o): Displays a menu that allows the player to see the information about their changed items and their class, if any.
 * /cantsee:  Makes all of the player's held weapons transparent for ease of use and to help visibility.
+* /toggleinfo: if `sm_tfrebalance_infoonspawn` is enabled, then this toggles on and off the notification of how many weapons were modified by the plugin to the player.
 ```
 
 Enjoy!
