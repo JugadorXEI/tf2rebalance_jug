@@ -21,6 +21,11 @@
 		"en"			"The plugin is not enabled. We can not make your weapons transparent."		
 	}
 	
+	"TFRebalance_Disabled"
+	{
+		"en"			"The plugin is not enabled."		
+	}
+	
 	"TFRebalance_InvalidPlayer"
 	{
 		"en"			"You are not a valid player."
@@ -88,7 +93,8 @@
 	
 	"TFRebalance_Cosmetics"
 	{
-		"en"			"Cosmetics"
+		"#format"		"{1:i}"
+		"en"			"Cosmetic {1}"
 	}
 	
 	"TFRebalance_ClassInfo"
@@ -121,5 +127,21 @@
 	"TFRebalance_ChangedTransparencyValue"
 	{
 		"en"			"The transparecy value for your weapons have been changed."
+	}
+	
+	"TFRebalance_SpawnInfo"
+	{
+		"#format"		"{1:i}"
+		"en"			"{yellow}{1}{default} of your weapons have changed! Type /official to see their changes."
+	}
+	
+	"TFRebalance_SpawnInfoToggledOn"
+	{
+		"en"			"You have enabled information about custom weapons on spawn."
+	}
+	
+	"TFRebalance_SpawnInfoToggledOff"
+	{
+		"en"			"You have disabled information about custom weapons on spawn."
 	}
 }

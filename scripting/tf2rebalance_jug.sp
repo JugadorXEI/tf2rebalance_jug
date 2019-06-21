@@ -11,10 +11,9 @@
 
 #pragma semicolon 1
 #pragma newdecls required
-#file "Rebalanced Fortress 2"
 
 // MAXIMUM STUFF WE CAN ADD [NOTE: DON'T GO OVERBOARD WITH THIS OR THE PLUGIN WILL GO SLOW]
-#define MAXIMUM_ADDITIONS 255
+#define MAXIMUM_ADDITIONS 1024
 #define MAXIMUM_ATTRIBUTES 20
 #define MAXIMUM_DESCRIPTIONLIMIT 475
 #define MAXIMUM_WEAPONSPERATTRIBUTESET 52
@@ -23,9 +22,34 @@
 // Command descriptions.
 #define REBALANCEDHELP_DESC "Displays info for rebalanced weapons."
 #define TRANSPARENCYHELP_DESC "Makes your weapons transparent."
-//
+#define WEAPONINFO_DESC "Toggles info on if your weapons have changes or not."
 
-#define PLUGIN_VERSION "v1.8.4"
+/* 1.9.0 checklist
+ * (Done) Make it so different cosmetics show separate in the weapon info menu.
+ * (Won't bother with it) ConVar that allows to preserve skins if available or regardless of if there's space or not.
+ * (Done) Notification on spawn that tells the player how many weapons have been customized
+ (0 = disable, 1 = enabled (can be disabled per player), 2 = disabled (but can be toggled off by player))
+ * (I guess) uhh fixes and optimization???
+*/
+
+/* Changelog:
+ * Now cosmetics will show separately on the balance menu.
+ * Added new notification system per spawn (sans the first spawn) that
+ tells the player how many weapons (and if their class) changed: 
+ `sm_tfrebalance_infoonspawn` (disabled by default).
+	- 0 = Always disabled (default).
+	- 1 = Enabled, can be toggled on and off by the player.
+	- 2 = Disabled, can be toggled on and off by the player.
+ * Fixed a bug where the balance menu would show descriptionless
+ items as a selectable choice, causing a blank menu.
+ * Fixed a bug where descriptions would sometimes not show in various
+ edge cases.
+ * Minor optimizations.
+*/
+
+// Certain shorthands for common definitions.
+#define PLUGIN_VERSION "v1.9.0"
+#define COSMETIC_MENUCHOICE "#cosmetic"
 
 public Plugin myinfo =
 {
@@ -40,6 +64,7 @@ public Plugin myinfo =
 ConVar g_bEnablePlugin; // Convar that enables plugin
 ConVar g_bLogMissingDependencies; // Convar that, if enabled, will log if dependencies are missing.
 ConVar g_bFirstTimeInfoOnSpawn; // Convar that displays info to the players on their first spawn that their weapons are modified.
+ConVar g_bInfoEverySpawn; // Convar that display info to the respawning player about their modified weapons if any.
 ConVar g_bItemPreserveAttributesDefault; // Convar that controls if the attributes should be preserved by default or not.
 ConVar g_fChangeWeaponOnTimer; // Convar that will change weapons or wearables after a set timer.
 ConVar g_bTimerOnlyAffectsBots; // Convar that'll make it so the timer function only affects bots.
@@ -54,6 +79,9 @@ ConVar g_bDebugKeyvaluesFile; // Convar that throws debug messages about keyvalu
 // Cookies
 Handle g_CookieWeaponVis = INVALID_HANDLE;
 bool g_bWeaponVis[MAXPLAYERS+1] = false;
+
+Handle g_CookieWeaponSpawnInfo = INVALID_HANDLE;
+bool g_bInfoOnSpawn[MAXPLAYERS+1] = false;
 
 // Keyvalues file for attributes
 Handle g_hKeyvaluesAttributesFile = INVALID_HANDLE;
@@ -113,8 +141,14 @@ public void OnPluginStart()
 	FCVAR_PROTECTED, true, 0.0, true, 1.0);
 	
 	g_bFirstTimeInfoOnSpawn = CreateConVar("sm_tfrebalance_firsttimeinfo", "1",
-	"Displays on the first player's spawn information about the modifications done to the weapons. Default = 1, 0 to disable.",
+	"Displays on the player's first spawn information about the modifications done to the weapons. Default = 1, 0 to disable.",
 	FCVAR_PROTECTED, true, 0.0, true, 1.0);
+	
+	g_bInfoEverySpawn = CreateConVar("sm_tfrebalance_infoonspawn", "0",
+	"Every other spawn after the initial one, the player is notified if their weapons have changes. " ...
+	"0 is fully disabled, 1 enables it by default but can be toggled off by the player, 2 makes it toggleable, "
+	... "but disabled at first.",
+	FCVAR_PROTECTED, true, 0.0, true, 2.0);
 	
 	g_bItemPreserveAttributesDefault = CreateConVar("sm_tfrebalance_preserveattribsbydefault", "0",
 	"Should the weapons set on the tf2rebalance_attributes.txt file preserve attributes by default? Default = 0, 1 to enable. "
@@ -142,7 +176,7 @@ public void OnPluginStart()
 	FCVAR_PROTECTED, true, 0.0, true, 1.0);
 	
 	g_bApplyClassChangesToMvMBots = CreateConVar("sm_tfrebalance_botsmvm_applyclassattribs", "0",
-	"Should class changes apply to MvM Bots? Enabling this could cause issues. Default = 0, 1 to enable",
+	"Should class changes apply to MvM Bots? Enabling this could cause issues. Default = 0, 1 to enable.",
 	FCVAR_PROTECTED, true, 0.0, true, 1.0);
 	
 	g_iWepTransparencyValue = CreateConVar("sm_tfrebalance_transparency_value", "200",
@@ -162,6 +196,8 @@ public void OnPluginStart()
 	
 	// The weapon transparency cookie:
 	g_CookieWeaponVis = RegClientCookie("tfrebalance_weaponvis", "Cookie that contains if weapons should be transparent for the user.", CookieAccess_Public);
+	g_CookieWeaponSpawnInfo = RegClientCookie("tfrebalance_weaponinfo", "Cookie that contains if the player should be told if their " ...
+	"weapons have changes or not", CookieAccess_Public);
 	
 	// Admin commands
 	RegAdminCmd("sm_tfrebalance_refresh", Rebalance_RefreshFile, ADMFLAG_ROOT,
@@ -186,9 +222,32 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_transparency", WeaponTransparency, TRANSPARENCYHELP_DESC);
 	RegConsoleCmd("sm_cantsee", WeaponTransparency, TRANSPARENCYHELP_DESC);
 	
+	// Constant notification command:
+	RegConsoleCmd("sm_toggleinfo", WeaponInfoToggle, WEAPONINFO_DESC);
+	RegConsoleCmd("sm_infotoggle", WeaponInfoToggle, WEAPONINFO_DESC);
+	
 	// Translations:
 	LoadTranslations("tf2rebalance.phrases");
 	LoadTranslations("common.phrases");
+	
+	// We account for reloads in the plugin by checking if the already-connected players
+	// have cookies cached and setting them.
+	for	(int i = 0; i < MAXPLAYERS+1; i++)
+	{
+		if (IsValidClient(i))
+		{
+			if (AreClientCookiesCached(i))
+			{
+				char cCookie[3];
+			
+				GetClientCookie(i, g_CookieWeaponVis, cCookie, sizeof(cCookie));
+				g_bWeaponVis[i] = view_as<bool>(StringToInt(cCookie));
+
+				GetClientCookie(i, g_CookieWeaponSpawnInfo, cCookie, sizeof(cCookie));
+				g_bInfoOnSpawn[i] = view_as<bool>(StringToInt(cCookie));
+			}
+		}
+	}
 }
 
 public void OnMapStart()
@@ -217,10 +276,29 @@ public void OnMapStart()
 public void OnClientCookiesCached(int iClient)
 {
 	char cIsEnabledValue[3];
+	
+	// Visibility weapon cookie setup
 	GetClientCookie(iClient, g_CookieWeaponVis, cIsEnabledValue, sizeof(cIsEnabledValue));
 	
 	int iValue = StringToInt(cIsEnabledValue);
 	g_bWeaponVis[iClient] = view_as<bool>(iValue);
+	
+	// Weapon info on spawn cookie setup
+	GetClientCookie(iClient, g_CookieWeaponSpawnInfo, cIsEnabledValue, sizeof(cIsEnabledValue));
+	
+	// If no value is stored, we'll store a default one.
+	if (StrEqual(cIsEnabledValue, "") && g_bInfoEverySpawn.IntValue != 0)
+	{
+		if (g_bInfoEverySpawn.IntValue == 1)
+			cIsEnabledValue = "1";
+		else if (g_bInfoEverySpawn.IntValue == 2)
+			cIsEnabledValue = "0";
+			
+		SetClientCookie(iClient, g_CookieWeaponSpawnInfo, cIsEnabledValue);
+	}
+	
+	iValue = StringToInt(cIsEnabledValue);
+	g_bInfoOnSpawn[iClient] = view_as<bool>(iValue);
 }
 
 // We check if tf2attributes exist or not.
@@ -349,6 +427,34 @@ public Action WeaponTransparency(int iClient, int iArgs)
 	return Plugin_Handled;
 }
 
+// 
+public Action WeaponInfoToggle(int iClient, int iArgs)
+{
+	if (!g_bEnablePlugin.BoolValue)
+	{
+		//  The plugin is not enabled.
+		ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_Disabled");
+		return Plugin_Handled;
+	}
+	else if (!IsValidClient(iClient))
+	{
+		// You're not a valid player (are you rcon? the console?)
+		ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_InvalidPlayer");
+		return Plugin_Handled;
+	}
+
+	char cPreference[32];
+	g_bInfoOnSpawn[iClient] = !g_bInfoOnSpawn[iClient];
+	
+	if (g_bInfoOnSpawn[iClient]) ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_SpawnInfoToggledOn");
+	else ReplyToCommand(iClient, "[TFRebalance] %t", "TFRebalance_SpawnInfoToggledOff");
+	
+	Format(cPreference, sizeof(cPreference), "%i", g_bInfoOnSpawn[iClient]);
+	SetClientCookie(iClient, g_CookieWeaponSpawnInfo, cPreference);
+
+	return Plugin_Handled;
+}
+
 public void SetWeaponsAsTransparent(int iClient)
 {
 	for	(int i = 0; i <= TFWeaponSlot_Melee; i++)
@@ -376,7 +482,20 @@ public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroa
 			CPrintToChat(iClient, "{unique}%t", "TFRebalance_CustomWarning");
 			g_bFirstSpawn[iClient] = true;
 		}
-	
+		// We only do this whenever we get a new set of weapons.
+		else if (g_bInfoEverySpawn.IntValue > 0 && g_bInfoOnSpawn[iClient] &&
+		StrEqual("post_inventory_application", cName))
+		{
+			int iWeaponCountChanged = GetChangedWeaponsCount(iClient);
+		
+			if (iWeaponCountChanged > 0)
+			{
+				PrintToServer("total: %i", iWeaponCountChanged);
+				CPrintToChat(iClient, "%t", "TFRebalance_SpawnInfo",
+				iWeaponCountChanged);
+			}
+		}
+		
 		// This is the part where we give the player the attributes.
 		TFClassType tfClassModified = TF2_GetPlayerClass(iClient); // We fetch the client's class
 		
@@ -490,7 +609,7 @@ public void ChangeWeaponsToBalancedState(int iClient)
 		
 		// We go through all the weapons we've modified to see if we can replace the player's weapon
 		// with another one that matches the index id.
-		for (int i = 0; i <= g_iRebalance_ItemIndexChangesNumber; i++)
+		for (int i = 0; i < g_iRebalance_ItemIndexChangesNumber; i++)
 		{			
 			// If a weapon's definition index matches with the one stored...
 			if (iPrimaryIndex == g_iRebalance_ItemIndexDef[i] ||
@@ -638,7 +757,7 @@ public void ChangeWeaponsToBalancedState(int iClient)
 
 					}
 					else // If we *don't* preserve attributes.
-					{
+					{					
 						// We add as many attributes as we put on the keyvalues file.
 						TF2Items_SetNumAttributes(hWeaponReplacement, g_iRebalance_ItemAttribute_AddNumber[i]);
 						
@@ -657,7 +776,7 @@ public void ChangeWeaponsToBalancedState(int iClient)
 							g_iRebalance_ItemAttribute_Add[i][iAdded], view_as<float>(g_fRebalance_ItemAttribute_AddValue[i][iAdded]));
 							
 							iAdded++; // We increase one on this int.
-						}					
+						}						
 					}
 					
 					// We'll remove the player's current weapon.
@@ -686,7 +805,7 @@ public Action TF2Items_OnGiveNamedItem(int iClient, char[] cClassname, int iItem
 		
 		// We go through all the weapons we've modified to see if we can replace the player's weapon
 		// with another one.
-		for (int i = 0; i <= g_iRebalance_ItemIndexChangesNumber; i++)
+		for (int i = 0; i < g_iRebalance_ItemIndexChangesNumber; i++)
 		{			
 			// If a weapon's definition index matches with the one stored...
 			if (iItemDefinitionIndex == g_iRebalance_ItemIndexDef[i])
@@ -837,16 +956,19 @@ public Action RebalancedHelp(int iClient, int iArgs)
 			if (iWeaponIndex != -1)
 			{
 				// We cycle through the stored weapon IDs.
-				for (int j = 0; j <= g_iRebalance_ItemIndexChangesNumber; j++)
+				for (int j = 0; j < g_iRebalance_ItemIndexChangesNumber; j++)
 				{			
 					// If a weapon's definition index matches with the one stored...
 					if (iWeaponIndex == g_iRebalance_ItemIndexDef[j])
 					{			
-						// Then we'll display the item, as it is a weapon with changes.
-						iWeaponStyle = ITEMDRAW_DEFAULT;
-						bWasAChangeMade = true;
-						// We don't need to cycle through the rest.
-						break;
+						if (g_bRebalance_DoesItemHaveDescription[j])
+						{	
+							// Then we'll display the item, as it is a weapon with changes.
+							iWeaponStyle = ITEMDRAW_DEFAULT;
+							bWasAChangeMade = true;
+							// We don't need to cycle through the rest.
+							break;
+						}
 					}
 				}				
 			}
@@ -858,12 +980,12 @@ public Action RebalancedHelp(int iClient, int iArgs)
 	
 	// Cosmetic items
 	// Ints for the wearable entity and the itemdraw style.
-	int iWearableItem = -1, iWearableStyle = ITEMDRAW_IGNORE;
+	int iWearableItem = -1, iWearableStyle = ITEMDRAW_IGNORE, iNumberOfCosmetics = 0;
 	
 	// We cycle through the wearables
 	// We try to find wearable items that belong to the client.
 	while ((iWearableItem = FindEntityByClassname(iWearableItem, "tf_wearable*")) != -1) // Regular hats.
-	{
+	{	
 		// We check for the wearable's item def index and its owner.
 		int iWearableIndex = GetEntProp(iWearableItem, Prop_Send, "m_iItemDefinitionIndex");
 		int iWearableOwner = GetEntPropEnt(iWearableItem, Prop_Send, "m_hOwnerEntity");
@@ -872,26 +994,36 @@ public Action RebalancedHelp(int iClient, int iArgs)
 		if (iWearableOwner == iClient)
 		{
 			// Going through all items.
-			for (int k = 0; k <= g_iRebalance_ItemIndexChangesNumber; k++)
+			for (int i = 0; i < g_iRebalance_ItemIndexChangesNumber; i++)
 			{			
 				// If a weapon's definition index matches with the one stored...
-				if (iWearableIndex == g_iRebalance_ItemIndexDef[k])
-				{				
-					// Then we'll display the item, as it is a weapon with changes.
-					iWearableStyle = ITEMDRAW_DEFAULT;
-					bWasAChangeMade = true;
-					// We don't need to cycle through the rest.
-					break;
+				if (iWearableIndex == g_iRebalance_ItemIndexDef[i])
+				{
+					if (g_bRebalance_DoesItemHaveDescription[i])
+					{
+						// We'll display the item, as it is a weapon with changes.
+						iWearableStyle = ITEMDRAW_DEFAULT;
+						bWasAChangeMade = true;
+					
+						// We'll concatenate the string with the ID of the item.
+						char cCosmeticString[16] = COSMETIC_MENUCHOICE, cItemIndex[7];
+						IntToString(i, cItemIndex, sizeof(cItemIndex));
+						StrCat(cCosmeticString, sizeof(cCosmeticString), cItemIndex);
+						
+						// PrintToServer("%s", cCosmeticString);
+						
+						// We'll add as many items as there are edited cosmetics.
+						char cCosmetics[64]; // Localizable string
+						Format(cCosmetics, sizeof(cCosmetics), "%T", "TFRebalance_Cosmetics", iClient, iNumberOfCosmetics + 1);
+						AddMenuItem(hRebalanceMenu, cCosmeticString, cCosmetics, iWearableStyle);
+					
+						// We'll add one item per cosmetic changed.
+						iNumberOfCosmetics++;
+					}
 				}
 			}
 		}
 	}
-	
-	// We add one singular item - we don't need to add multiple for each cosmetic.
-	// It's just for display purposes after all.
-	char cCosmetics[64]; // Localizable string
-	Format(cCosmetics, sizeof(cCosmetics), "%T", "TFRebalance_Cosmetics", iClient);
-	AddMenuItem(hRebalanceMenu, "#cosmetic", cCosmetics, iWearableStyle);
 	
 	char cTitle[128]; // Localizable string;
 	if (!bWasAChangeMade)
@@ -976,8 +1108,9 @@ public int RebalancePanel(Handle hMenu, MenuAction maAction, int iParam1, int iP
 					// We get the player's weapon entity from the weapon slot
 					// which they selected on the previous menu.
 					int iWeaponInSlot = GetPlayerWeaponSlot(iParam1, iSlot);
+					
 					// If the weapon entity is valid...
-					if (IsValidEntity(iWeaponInSlot) && iWeaponInSlot > MAXPLAYERS+1)
+					if (IsValidEntity(iWeaponInSlot))
 					{
 						// We get the item's item def index.
 						int iWeaponDefinitionIndex = GetEntProp(iWeaponInSlot, Prop_Send, "m_iItemDefinitionIndex");
@@ -986,8 +1119,8 @@ public int RebalancePanel(Handle hMenu, MenuAction maAction, int iParam1, int iP
 						if (iWeaponDefinitionIndex != -1)
 						{
 							// We cycle through the stored weapon IDs.
-							for (int i = 0; i <= g_iRebalance_ItemIndexChangesNumber; i++)
-							{			
+							for (int i = 0; i < g_iRebalance_ItemIndexChangesNumber; i++)
+							{	
 								// If a weapon's definition index matches with the one stored...
 								if (iWeaponDefinitionIndex == g_iRebalance_ItemIndexDef[i])
 								{				
@@ -997,6 +1130,7 @@ public int RebalancePanel(Handle hMenu, MenuAction maAction, int iParam1, int iP
 									{
 										StrCat(cThingInformation, sizeof(cThingInformation),
 										g_cRebalance_ItemDescription[i]);
+		
 										// We break the loop, there's no need to cycle through more.
 										break;
 									}
@@ -1006,9 +1140,20 @@ public int RebalancePanel(Handle hMenu, MenuAction maAction, int iParam1, int iP
 					}
 				}
 				// Has the user selected the cosmetic slot.
-				else if (StrEqual(cInfo, "#cosmetic"))
+				else if (StrContains(cInfo, COSMETIC_MENUCHOICE) != -1)
 				{
 					// PrintToConsole(iParam1, "Cosmetic selected");
+					// We'll get the ID of the item that we're getting info from.
+					char cCosmeticIndex[8];
+					for	(int i = strlen(COSMETIC_MENUCHOICE), iNumericChars = 0; i < strlen(cInfo); i++)
+					{
+						cCosmeticIndex[iNumericChars] = cInfo[i];
+						iNumericChars++;
+					}
+					
+					int iCosmeticIndex = StringToInt(cCosmeticIndex);
+					
+					// PrintToServer("%s - %i (%s)", cCosmeticIndex, iCosmeticIndex, cInfo);
 					
 					// We concatenate the info string onto the main string.
 					char cCosmeticInfo[64]; // Localizable string
@@ -1016,41 +1161,17 @@ public int RebalancePanel(Handle hMenu, MenuAction maAction, int iParam1, int iP
 					StrCat(cThingInformation, sizeof(cThingInformation), cCosmeticInfo);
 					StrCat(cThingInformation, sizeof(cThingInformation), "\n");
 					
-					// Cosmetic item entity index.
-					int iWearableItem = -1;
-					
-					// Loop that will check through wearable types.
-					// We check through all entities in search of wearables.
-					while ((iWearableItem = FindEntityByClassname(iWearableItem, "tf_wearable*")) != -1) // Regular hats.
+					// We concatenate the item's description onto the menu's title
+					// if it has any description at all.
+					if (g_bRebalance_DoesItemHaveDescription[iCosmeticIndex])
 					{
-						// We get the item def index and owner of the wearable.
-						int iWearableIndex = GetEntProp(iWearableItem, Prop_Send, "m_iItemDefinitionIndex");
-						int iWearableOwner = GetEntPropEnt(iWearableItem, Prop_Send, "m_hOwnerEntity");
-						
-						// If the client and the wearable's owner is the same...
-						if (iWearableOwner == iParam1)
-						{
-							// Going through all items.
-							for (int j = 0; j <= g_iRebalance_ItemIndexChangesNumber; j++)
-							{			
-								// If a weapon's definition index matches with the one stored...
-								if (iWearableIndex == g_iRebalance_ItemIndexDef[j])
-								{	
-									// We concatenate the item's description onto the menu's title
-									// if it has any description at all.
-									if (g_bRebalance_DoesItemHaveDescription[j])
-									{
-										StrCat(cThingInformation, sizeof(cThingInformation),
-										g_cRebalance_ItemDescription[j]);
-										StrCat(cThingInformation, sizeof(cThingInformation),
-										"\n");
-										// We don't break the loop this time, as there could be
-										// multiple cosmetic items. Also we concatenate a new line.
-									}									
-								}
-							}
-						}
-					}
+						StrCat(cThingInformation, sizeof(cThingInformation),
+						g_cRebalance_ItemDescription[iCosmeticIndex]);
+						StrCat(cThingInformation, sizeof(cThingInformation),
+						"\n");
+						// We don't break the loop this time, as there could be
+						// multiple cosmetic items. Also we concatenate a new line.
+					}									
 				}
 				
 				// We fix new lines and percentages here.
@@ -1228,7 +1349,7 @@ public bool GetAndStoreWeaponAttributes()
 					g_cRebalance_ItemDescription[g_iRebalance_ItemIndexChangesNumber],
 					MAXIMUM_DESCRIPTIONLIMIT);
 					
-					if (!StrEqual(g_cRebalance_ItemDescription[g_iRebalance_ItemIndexChangesNumber], "", false))
+					if (strlen(g_cRebalance_ItemDescription[g_iRebalance_ItemIndexChangesNumber]) > 0)
 						g_bRebalance_DoesItemHaveDescription[g_iRebalance_ItemIndexChangesNumber] = true;
 					
 					// We get if the item should preserve attributes
@@ -1420,6 +1541,88 @@ stock bool WipeStoredAttributes()
 		
 		k++;
 	}
+}
+
+stock int GetChangedWeaponsCount(int iClient)
+{
+	int iChangedWeapons = 0;
+	
+	int iPrimary = -1, iSecondary = -1, iMelee = -1, iBuilding = -1;
+	int iPrimaryIndex = -1, iSecondaryIndex = -1, iMeleeIndex = -1, iBuildingIndex = -1;
+	
+	// primary weapon and def index:
+	iPrimary = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Primary);
+	if (iPrimary != -1) iPrimaryIndex = GetEntProp(iPrimary, Prop_Send, "m_iItemDefinitionIndex");
+	
+	// secondary weapon and def index:
+	iSecondary = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Secondary);
+	if (iSecondary != -1) iSecondaryIndex = GetEntProp(iSecondary, Prop_Send, "m_iItemDefinitionIndex");
+	
+	// melee weapon and def index:
+	iMelee = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Melee);
+	if (iMelee != -1) iMeleeIndex = GetEntProp(iMelee, Prop_Send, "m_iItemDefinitionIndex");
+
+	// building weapon and def index:
+	if (TF2_GetPlayerClass(iClient) == TFClass_Spy)
+	{
+		iBuilding = GetPlayerWeaponSlot(iClient, TFWeaponSlot_Building);
+		if (iBuilding != -1) iBuildingIndex = GetEntProp(iBuilding, Prop_Send, "m_iItemDefinitionIndex");
+	}
+
+	// Debug stuff:
+	// PrintToConsole(iClient, "iPrimary: %i (Index: %i)\niSecondary: %i (Index: %i)\niMelee: %i (Index: %i)", iPrimary, iPrimaryIndex, iSecondary, iSecondaryIndex, iMelee, iMeleeIndex);
+		
+	// We go through all the weapons we've modified to see if we can replace the player's weapon
+	// with another one that matches the index id.
+	for (int i = 0; i < g_iRebalance_ItemIndexChangesNumber; i++)
+	{			
+		// If a weapon's definition index matches with the one stored...
+		if (iPrimaryIndex == g_iRebalance_ItemIndexDef[i] ||
+		iSecondaryIndex == g_iRebalance_ItemIndexDef[i] ||
+		iMeleeIndex == g_iRebalance_ItemIndexDef[i] ||
+		iBuildingIndex == g_iRebalance_ItemIndexDef[i])
+		{
+			iChangedWeapons++;
+			// PrintToServer("Adding weapon (%i)...", g_iRebalance_ItemIndexDef[i]);
+		}
+	}
+	
+	// Cosmetic items
+	// Ints for the wearable entity and the itemdraw style.
+	int iWearableItem = -1;
+	
+	// We cycle through the wearables
+	// We try to find wearable items that belong to the client.
+	while ((iWearableItem = FindEntityByClassname(iWearableItem, "tf_wearable*")) != -1) // Regular hats.
+	{	
+		// We check for the wearable's item def index and its owner.
+		int iWearableIndex = GetEntProp(iWearableItem, Prop_Send, "m_iItemDefinitionIndex");
+		int iWearableOwner = GetEntPropEnt(iWearableItem, Prop_Send, "m_hOwnerEntity");
+		
+		// If the owners match.
+		if (iWearableOwner == iClient)
+		{
+			// Going through all items.
+			for (int i = 0; i < g_iRebalance_ItemIndexChangesNumber; i++)
+			{			
+				// If a weapon's definition index matches with the one stored...
+				if (iWearableIndex == g_iRebalance_ItemIndexDef[i])
+				{
+					// PrintToServer("Adding cosmetic (%i)...", g_iRebalance_ItemIndexDef[i]);
+					iChangedWeapons++;
+				}
+					
+			}
+		}
+	}
+	
+	if (g_bRebalance_ClassChanged[TF2_GetPlayerClass(iClient)])
+	{
+		// PrintToServer("Adding class...");
+		iChangedWeapons++;
+	}
+	
+	return iChangedWeapons;
 }
 
 // Helps us know if the player counts as valid of not.

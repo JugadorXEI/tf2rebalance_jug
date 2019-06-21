@@ -21,6 +21,11 @@
 		"es"			"El plugin no está activado. No podemos hacer que tus armas sean transparentes."		
 	}
 	
+	"TFRebalance_Disabled"
+	{
+		"es"			"El plugin no está activado."		
+	}
+	
 	"TFRebalance_InvalidPlayer"
 	{
 		"es"			"No eres un jugador válido."
@@ -88,7 +93,8 @@
 	
 	"TFRebalance_Cosmetics"
 	{
-		"es"			"Cosméticos"
+		"#format"		"{1:i}"
+		"es"			"Cosmético {1}"
 	}
 	
 	"TFRebalance_ClassInfo"
@@ -104,7 +110,7 @@
 	
 	"TFRebalance_CosmeticInfo"
 	{
-		"es"			"Información de cosméticos:"
+		"es"			"Información de cosmético:"
 	}
 	
 	"TFRebalance_Back"
@@ -121,5 +127,21 @@
 	"TFRebalance_ChangedTransparencyValue"
 	{
 		"es"			"El valor de transparencia de tus armas ha sido cambiada."
+	}
+	
+	"TFRebalance_SpawnInfo"
+	{
+		"#format"		"{1:i}"
+		"en"			"¡{yellow}{1}{default} de tus armas han cambiado! Escribe /official para saber que ha cambiado."
+	}
+	
+	"TFRebalance_SpawnInfoToggledOn"
+	{
+		"en"			"La información de armas customizadas al reaparecer ha sido activada."
+	}
+	
+	"TFRebalance_SpawnInfoToggledOff"
+	{
+		"en"			"La información de armas customizadas al reaparecer ha sido desactivada."
 	}
 }

@@ -21,6 +21,11 @@
 		"nl"			"De plugin is niet ingeschakeld. We kunnen je wapens niet transparant maken."	
 	}
 	
+	"TFRebalance_Disabled"
+	{
+		"nl"			"De plugin is niet ingeschakeld."	
+	}
+	
 	"TFRebalance_InvalidPlayer"
 	{
 		"nl"			"Je bent geen geldige speler."
@@ -88,7 +93,8 @@
 	
 	"TFRebalance_Cosmetics"
 	{
-		"nl"			"Cosmetics"
+		"#format"		"{1:i}"
+		"nl"			"Cosmetic {1}"
 	}
 	
 	"TFRebalance_ClassInfo"
