@@ -44,6 +44,7 @@
  items as a selectable choice, causing a blank menu.
  * Fixed a bug where descriptions would sometimes not show in various
  edge cases.
+ * Changed wording in various localization strings.
  * Minor optimizations.
 */
 
@@ -490,7 +491,7 @@ public Action Event_PlayerSpawn(Handle hEvent, const char[] cName, bool dontBroa
 		
 			if (iWeaponCountChanged > 0)
 			{
-				PrintToServer("total: %i", iWeaponCountChanged);
+				// PrintToServer("total: %i", iWeaponCountChanged);
 				CPrintToChat(iClient, "%t", "TFRebalance_SpawnInfo",
 				iWeaponCountChanged);
 			}
