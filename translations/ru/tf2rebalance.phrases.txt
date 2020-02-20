@@ -1,0 +1,147 @@
+"Phrases"
+{
+	"TFRebalance_CustomWarning"
+	{
+		"ru"			"Оружие, с которым вы будете играть, было изменено и сбалансировано этим сервером.\Напишите /official чтобы узнать больше о том, что изменилось."
+	}
+
+	"TFRebalance_StoredItems"
+	{
+		"#format"		"{1:i},{2:i}"
+		"ru"			"На хранении {1} оружия и {2} класса всего на смену."
+	}
+	
+	"TFRebalance_TF2Attributes_NoLoad"
+	{
+		"ru"			"tf2attributes не загружен. Это не позволит плагину добавлять атрибуты в классы."
+	}
+	
+	"TFRebalance_Disabled_NoTransparency"
+	{
+		"ru"			"Плагин не включен. Мы не можем сделать ваше оружие прозрачным."		
+	}
+	
+	"TFRebalance_Disabled"
+	{
+		"ru"			"Плагин не включен."		
+	}
+	
+	"TFRebalance_InvalidPlayer"
+	{
+		"ru"			"Вы не действительный игрок."
+	}
+	
+	"TFRebalance_InvalidClass_NoTransparency"
+	{
+		"ru"			"Мы можем сделать ваше оружие прозрачным, только если вы появитесь как класс."
+	}
+	
+	"TFRebalance_NormalWeapon"
+	{
+		"ru"			"Ваше оружие нормализовалось."
+	}
+	
+	"TFRebalance_TransparentWeapon"
+	{
+		"ru"			"Ваше оружие теперь прозрачно."
+	}
+	
+	"TFRebalance_InfoChoose"
+	{
+		"ru"			"Выберите опцию для получения информации от."
+	}
+	
+	"TFRebalance_NoChange"
+	{
+		"ru"			"Кажется, нет никакой информации, которую мы можем вам дать."
+	}
+	
+	"TFRebalance_CurrentClass"
+	{
+		"ru"			"Текущий Класс"
+	}
+	
+	"TFRebalance_Primary"
+	{
+		"ru"			"Основное оружие"
+	}
+	
+	"TFRebalance_Secondary"
+	{
+		"ru"			"Доп. оружие"
+	}
+	
+	"TFRebalance_Melee"
+	{
+		"ru"			"Ближний бой"
+	}
+	
+	"TFRebalance_Grenade"
+	{
+		"ru"			"Граната"
+	}
+	
+	"TFRebalance_Building"
+	{
+		"ru"			"Часы"
+	}
+	
+	"TFRebalance_PDA"
+	{
+		"ru"			"КПК"
+	}
+	
+	"TFRebalance_Cosmetics"
+	{
+		"#format"		"{1:i}"
+		"ru"			"Аксессуар {1}"
+	}
+	
+	"TFRebalance_ClassInfo"
+	{
+		"ru"			"Информация Класса:"
+	}
+	
+	"TFRebalance_WeaponInfo"
+	{
+		"#format"		"{1:s}"
+		"ru"			"Информация Оружия {1}:"
+	}
+	
+	"TFRebalance_CosmeticInfo"
+	{
+		"ru"			"Информация Аксессуара:"
+	}
+	
+	"TFRebalance_Back"
+	{
+		"ru"			"Назад"
+	}
+	
+	"TFRebalance_RefreshedWeapon"
+	{
+		"#format"		"{1:t}"
+		"ru"			"Оружие игрока {1} было обновлено до его сбалансированного аналога."
+	}
+	
+	"TFRebalance_ChangedTransparencyValue"
+	{
+		"ru"			"Значение прозрачности для вашего оружия было изменено."
+	}
+	
+	"TFRebalance_SpawnInfo"
+	{
+		"#format"		"{1:i}"
+		"ru"			"{yellow}{1}{default} из вашего оружия изменилось! Напишите /official чтобы увидеть их изменения."
+	}
+	
+	"TFRebalance_SpawnInfoToggledOn"
+	{
+		"ru"			"Вы включили информацию о кастомном оружии при возрождении."
+	}
+	
+	"TFRebalance_SpawnInfoToggledOff"
+	{
+		"ru"			"Вы отключили информацию о кастомном оружии при возрождении."
+	}
+}
